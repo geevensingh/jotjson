@@ -169,14 +169,20 @@ const ACCEPT_TYPES: readonly FilePickerAcceptType[] = [
  *   {@link requestWritePermission} which `HomeComponent.onSave`
  *   invokes inside the Save-click handler.
  *
- * In all paths, `createWritable()` itself enforces the permission
- * gate: it throws `NotAllowedError` when readwrite has not been
- * granted, which `saveToFile` maps to the closed-enum
- * `'permissionDeniedRevoked'` cause. We deliberately do NOT
- * pre-query permission on the save path -- the spec-defined throw
- * is sufficient and skipping the query keeps a successful save to
- * one round-trip. A revoked grant therefore surfaces at the moment
- * of write rather than as a separate pre-check.
+ * In all paths, `HomeComponent.onSave` calls
+ * {@link requestWritePermission} before {@link saveToFile} so a revoked
+ * grant surfaces as a clean `'permissionDeniedInitial'` snackbar
+ * (with the "Save as new file..." action) rather than as the raw
+ * `NotAllowedError` from `createWritable()`. The check costs one
+ * extra round-trip per save against a `queryPermission()` /
+ * `requestPermission()` pair (both are short-circuited by the
+ * browser when the grant is still valid -- see
+ * {@link requestWritePermission}'s `'granted'` fast-path). The
+ * `createWritable()` throw remains the second line of defense:
+ * `saveToFile` maps `NotAllowedError` to the
+ * `'permissionDeniedRevoked'` cause for the race where the grant
+ * was valid at `requestWritePermission` but revoked mid-flight
+ * before the actual write reached the browser.
  *
  * Server-platform safety: the constructor performs NO `window.*`,
  * `navigator.*`, or DOM access. Feature-detect predicates live in

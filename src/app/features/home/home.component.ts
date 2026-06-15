@@ -3252,7 +3252,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       case 'ok': {
         const filename = files[0]?.name ?? 'file';
         const sizeBytes = files[0]?.size ?? new Blob([result.text]).size;
-        const lastModifiedAtAttach = files[0]?.lastModified ?? Date.now();
+        const lastModifiedKnown = files[0]?.lastModified ?? Date.now();
         const parseStartedAt = performance.now();
         const { unescaped } = this.parser.tryUnescape(result.text);
         const parseMs = this.durationSince(parseStartedAt);
@@ -3331,7 +3331,7 @@ export class HomeComponent implements OnInit, OnDestroy {
             kind: 'file',
             handle: adoptedHandle,
             filename,
-            lastModifiedAtAttach,
+            lastModifiedKnown,
             savedSnapshot: {
               content: unescaped,
               title: this.title(),
@@ -3666,7 +3666,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         kind: 'file',
         handle: backing.handle,
         filename: backing.filename,
-        lastModifiedAtAttach: lastModified,
+        lastModifiedKnown: lastModified,
         savedSnapshot: {
           content: text,
           title: this.title(),
@@ -3724,7 +3724,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         kind: 'file',
         handle: result.handle,
         filename: result.file.name,
-        lastModifiedAtAttach: result.lastModified,
+        lastModifiedKnown: result.lastModified,
         savedSnapshot: {
           content: text,
           title: this.title(),

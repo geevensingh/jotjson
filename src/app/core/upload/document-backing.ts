@@ -16,10 +16,15 @@ import type { BlobHighlight, JsonBlob } from '../api/models';
  *
  * - **`'file'`**: a local file is bound to the editor via the File System
  *   Access API. `handle` is the writable `FileSystemFileHandle`; `filename`
- *   is its display name at attach time; `lastModifiedAtAttach` stamps the
- *   file's `.lastModified` so a future "file changed on disk" check has a
- *   baseline. `savedSnapshot` captures content/title/highlights at attach
- *   (or last successful save) time.
+ *   is its display name at attach time; `lastModifiedKnown` is the most
+ *   recent `.lastModified` value we have observed for the file -- stamped
+ *   at attach time and refreshed on every successful Save / Save as new
+ *   file. It is a rolling "last-known on-disk timestamp", NOT a fixed
+ *   attach-time baseline: comparing `await handle.getFile().lastModified`
+ *   against it is the foundation for a future "file changed on disk by
+ *   another editor" check, which only fires when the on-disk value
+ *   exceeds the last value we wrote. `savedSnapshot` captures
+ *   content/title/highlights at attach (or last successful save) time.
  *
  *   File-backed dirty is **content-only** by convention: highlight or
  *   title edits do not flip `dirty` and do not trigger Save writes,
@@ -47,7 +52,7 @@ export type DocumentBacking =
       readonly kind: 'file';
       readonly handle: FileSystemFileHandle;
       readonly filename: string;
-      readonly lastModifiedAtAttach: number;
+      readonly lastModifiedKnown: number;
       readonly savedSnapshot: LoadedSnapshot;
     };
 

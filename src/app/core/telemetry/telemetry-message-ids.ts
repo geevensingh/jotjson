@@ -1150,8 +1150,15 @@ const TELEMETRY_MESSAGE_IDS = [
    *   `download`      -- Download button click.
    *   `format`        -- Format / pretty-print button.
    *   `minify`        -- Minify button.
+   *   `sort`          -- Sort button (overflow menu).
    *   `clear`         -- Clear button.
    *   `save`          -- Save button (or Enter on title field).
+   *   `saveAsNewFile` -- overflow menu "Save as new file..."
+   *                      (Chromium-only; file-backed sessions).
+   *   `saveAsBlob`    -- overflow menu "Save as blob..."
+   *                      (signed-in + file-backed sessions; opens
+   *                      the SaveAsBlobDialog for a fire-and-forget
+   *                      cloud copy that preserves the file binding).
    *   `copyShareLink` -- overflow menu "Copy share link".
    *   `deleteBlob`    -- overflow menu "Delete".
    *   `fileChange`    -- a file was actually selected from the

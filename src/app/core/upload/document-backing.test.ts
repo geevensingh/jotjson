@@ -75,7 +75,7 @@ describe('DocumentBacking', () => {
         kind: 'file',
         handle: makeFileHandle(),
         filename: 'data.json',
-        lastModifiedAtAttach: 1_700_000_000_000,
+        lastModifiedKnown: 1_700_000_000_000,
         savedSnapshot: makeSnapshot(),
       };
       expect(isDraftBacking(backing)).toBe(false);
@@ -101,7 +101,7 @@ describe('DocumentBacking', () => {
         kind: 'file',
         handle: makeFileHandle(),
         filename: 'data.json',
-        lastModifiedAtAttach: 1_700_000_000_000,
+        lastModifiedKnown: 1_700_000_000_000,
         savedSnapshot: makeSnapshot(),
       };
       expect(isBlobBacking(backing)).toBe(false);
@@ -114,7 +114,7 @@ describe('DocumentBacking', () => {
         kind: 'file',
         handle: makeFileHandle(),
         filename: 'data.json',
-        lastModifiedAtAttach: 1_700_000_000_000,
+        lastModifiedKnown: 1_700_000_000_000,
         savedSnapshot: makeSnapshot(),
       };
       expect(isFileBacking(backing)).toBe(true);
@@ -155,7 +155,7 @@ describe('DocumentBacking', () => {
         kind: 'file',
         handle: makeFileHandle(),
         filename: 'data.json',
-        lastModifiedAtAttach: 1_700_000_000_000,
+        lastModifiedKnown: 1_700_000_000_000,
         savedSnapshot: snapshot,
       };
       expect(getSavedSnapshot(backing)).toBe(snapshot);
@@ -197,7 +197,7 @@ describe('DocumentBacking', () => {
           kind: 'file',
           handle: makeFileHandle(),
           filename: 'data.json',
-          lastModifiedAtAttach: 1_700_000_000_000,
+          lastModifiedKnown: 1_700_000_000_000,
           savedSnapshot: makeSnapshot(),
         }),
       ).toBe('file');
