@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { TitleSuggesterService } from '../../../core/title-suggester/title-suggester.service';
 import type { SuggestionCandidate } from '../../../core/title-suggester/types';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -88,7 +89,7 @@ export interface SaveAsBlobDialogResult {
 @Component({
   selector: 'jj-save-as-blob-dialog',
   standalone: true,
-  imports: [MatButtonModule, MatDialogModule, IconComponent, ...JJ_MENU_IMPORTS],
+  imports: [MatButtonModule, MatDialogModule, MatTooltipModule, IconComponent, ...JJ_MENU_IMPORTS],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h2 mat-dialog-title i18n="@@saveAsBlobDialog.title">Save as cloud blob</h2>

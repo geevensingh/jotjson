@@ -3105,13 +3105,17 @@ export class HomeComponent implements OnInit, OnDestroy {
   async onUpload(file: File): Promise<void> {
     // Phase 3: toolbar Upload still goes through `<input type="file">`
     // which yields a `File` without a writable handle. Phase 4 upgrades
-    // the toolbar Upload click to `showOpenFilePicker({mode:
-    // 'readwrite'})` on Chromium so the picker path also produces a
-    // file-backed `DocumentBacking` variant (see `onLocalFilePicked`).
-    // This handler covers the Safari/Firefox fallback path and any
-    // future surface that delivers a bare `File`. Pass `[null]` for
-    // handles so the unified `onFilesReceived` path can still gate on
-    // the handle availability.
+    // the toolbar Upload click to call `showOpenFilePicker()` on
+    // Chromium (via `FileAccessService.openLocalFile()`) and then
+    // upgrade the returned handle's permission to readwrite via
+    // `handle.requestPermission({ mode: 'readwrite' })`. The picker
+    // path emits the resulting `{file, handle}` tuple to
+    // `onLocalFilePicked` so the document binds to the file-backed
+    // `DocumentBacking` variant. This handler covers the
+    // Safari/Firefox fallback path (no File System Access support)
+    // and any future surface that delivers a bare `File`. Pass
+    // `[null]` for handles so the unified `onFilesReceived` path
+    // can still gate on handle availability.
     await this.onFilesReceived([file], 'pick', [null]);
   }
 

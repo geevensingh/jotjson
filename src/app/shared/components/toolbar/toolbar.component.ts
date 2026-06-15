@@ -389,12 +389,22 @@ export class ToolbarComponent {
 
   triggerFilePicker(): void {
     this.emitToolbarAction('openFile');
-    // Chromium-installed-PWA + Chromium-tab: use the File System Access
-    // picker so the resulting handle is writable. The promise resolves
-    // null on user-cancel; rejects only for unexpected failures, which
-    // we log + fall through to the legacy input. Safari/Firefox: the
-    // feature-detect returns false and we go straight to the legacy
-    // `<input type="file">` click.
+    // Two-arm dispatch:
+    //
+    // - Chromium-installed-PWA + Chromium-tab: the File System Access
+    //   picker yields a writable handle so Save can write back to
+    //   disk. `openViaPicker()` runs asynchronously and handles its
+    //   own errors (cancel -> silent return; permission/security
+    //   errors -> logged warn). It does NOT fall back to the legacy
+    //   `<input>` on failure: the picker covers the same user intent
+    //   ("pick a local file"), so opening the legacy chooser after a
+    //   permission denial would be confusing (two pickers for one
+    //   click). If we ever decide that fall-through is the better
+    //   UX, the change goes inside `openViaPicker()`'s catch.
+    // - Safari/Firefox (no File System Access support): the
+    //   feature-detect returns false and we click the legacy
+    //   `<input type="file">`. The resulting File has no handle so
+    //   the document binds to the non-file `DocumentBacking` shape.
     if (this.fileAccess.hasFileSystemAccess()) {
       void this.openViaPicker();
       return;

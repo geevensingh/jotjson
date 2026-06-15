@@ -3532,8 +3532,10 @@ Out of scope (for v1):
   the bound local `FileSystemFileHandle` via
   `FileSystemFileHandle.createWritable()` -> `write` -> `close`.
   Three Chromium entry paths produce a writable backing - launchQueue
-  (OS double-click), `showOpenFilePicker({mode:'readwrite'})`
-  (toolbar Upload upgrade), and `DataTransferItem.getAsFileSystemHandle()`
+  (OS double-click), `showOpenFilePicker()` + handle-level
+  `requestPermission({mode:'readwrite'})` (toolbar Upload upgrade,
+  via `FileAccessService.openLocalFile()`), and
+  `DataTransferItem.getAsFileSystemHandle()`
   (drag-drop async upgrade) - all feeding one unified
   `onFilesReceived(files, source, handles)` pipeline that binds the
   document to a new `DocumentBacking` discriminated union variant.
