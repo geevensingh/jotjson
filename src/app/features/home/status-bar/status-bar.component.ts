@@ -7,6 +7,24 @@ import { EditorMode } from '../editor-mode';
 import { computeMinifiedChars, computeTextStats, computeTreeStats, formatBytes } from './stats';
 
 /**
+ * Discriminated identity surfaced by the status bar's left-side
+ * identity stat. `null` for an anonymous draft (no stat rendered);
+ * `{kind:'file', filename}` for a document bound to a local
+ * `FileSystemFileHandle` via the M-PWA-write-back flow; `{kind:'blob',
+ * slug}` for a document loaded from a server-side blob (post-save or
+ * via `/s/:slug` navigation).
+ *
+ * Modeled as a union so the stat's three states (no stat / file-stat /
+ * blob-stat) are exhaustive in the template, and so a caller cannot
+ * accidentally set both a filename + a slug. Mirrors the
+ * `DocumentBacking` union over in `core/upload/document-backing.ts`,
+ * which is the upstream source of truth.
+ */
+export type StatusBarIdentity =
+  | { readonly kind: 'file'; readonly filename: string }
+  | { readonly kind: 'blob'; readonly slug: string };
+
+/**
  * Home page status bar (M7m). Purely informational row showing text and tree
  * stats. Read-only; no interactivity in v1. On narrow viewports the bar
  * collapses via CSS to a single line keeping only Lines, Size, and the Mode
@@ -27,15 +45,35 @@ export class StatusBarComponent {
   readonly cursor = input<{ line: number; column: number } | undefined>(undefined);
 
   /**
-   * Display name of the local file the document is bound to via the
-   * M-PWA-write-back flow (`DocumentBacking` kind === 'file'). When
-   * non-null, the status bar surfaces this as a left-side stat so
-   * multi-window PWA users can distinguish their tabs at a glance
-   * (complements the browser tab title which also carries the
-   * filename for file-backed docs - see `HomeComponent`'s title
-   * effect). `null` for draft + blob-backed documents.
+   * Identity stat surfaced on the left of the status bar. Distinct
+   * stat per `kind`:
+   *
+   * - `{kind:'file', filename}`: file-backed document via the
+   *   M-PWA-write-back flow. Renders a save-icon + `<filename>`.
+   *   The browser tab title also carries the filename for
+   *   multi-window distinguishability; this stat exists so the
+   *   filename is visible inside the editor as well.
+   * - `{kind:'blob', slug}`: blob-backed document. Renders a link-
+   *   icon + `blob: <slug>`. This is the only identity affordance
+   *   when running as an installed PWA, where the address bar is
+   *   hidden -- without it, two installed-PWA windows pointing at
+   *   different blobs would be visually indistinguishable.
+   * - `null`: anonymous draft. No stat rendered.
+   *
+   * Plumbed from `HomeComponent`'s `statusBarIdentity` computed,
+   * which derives this from `_documentBacking()`.
    */
-  readonly filename = input<string | null>(null);
+  readonly identity = input<StatusBarIdentity | null>(null);
+
+  /** Convenience accessors so the template can read each variant directly. */
+  readonly fileIdentity = computed(() => {
+    const id = this.identity();
+    return id !== null && id.kind === 'file' ? id : null;
+  });
+  readonly blobIdentity = computed(() => {
+    const id = this.identity();
+    return id !== null && id.kind === 'blob' ? id : null;
+  });
 
   readonly textStats = computed(() => computeTextStats(this.text()));
 

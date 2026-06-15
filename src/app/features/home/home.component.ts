@@ -122,7 +122,7 @@ import {
   type SortDocumentResult,
   type SortPatchResult,
 } from './sort-json-patcher';
-import { StatusBarComponent } from './status-bar/status-bar.component';
+import { StatusBarComponent, type StatusBarIdentity } from './status-bar/status-bar.component';
 import { collectStringLeaves } from './string-leaf-collector';
 import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
 
@@ -968,6 +968,29 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly fileBackedFilename = computed<string | null>(() => {
     const backing = this._documentBacking();
     return backing.kind === 'file' ? backing.filename : null;
+  });
+
+  /**
+   * Discriminated identity surfaced by the status bar's left-side
+   * stat. Mirrors the `_documentBacking` union:
+   * - `kind:'file'` -> shows the filename with a save-icon.
+   * - `kind:'blob'` -> shows `blob: <slug>` with a link-icon. This
+   *   is the only identity affordance when running as an installed
+   *   PWA (the URL bar is hidden in standalone display mode), so
+   *   without it two installed-PWA windows pointing at different
+   *   blobs would be visually indistinguishable inside the editor.
+   * - `kind:'draft'` -> null (no identity stat rendered).
+   */
+  readonly statusBarIdentity = computed<StatusBarIdentity | null>(() => {
+    const backing = this._documentBacking();
+    switch (backing.kind) {
+      case 'file':
+        return { kind: 'file', filename: backing.filename };
+      case 'blob':
+        return { kind: 'blob', slug: backing.blob.slug };
+      case 'draft':
+        return null;
+    }
   });
 
   readonly canEditHighlights = computed(() => this.loadedBlob() === null || this.isOwnedBlob());

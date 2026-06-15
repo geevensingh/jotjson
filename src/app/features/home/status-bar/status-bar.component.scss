@@ -75,17 +75,18 @@
   font-size: 11px;
 }
 
-.stat-filename {
-  // Icon + filename rendering: vertically center the icon with the
+.stat-identity {
+  // Icon + identity rendering: vertically center the icon with the
   // text (default `.stat` is baseline-aligned for label/value pairs).
   align-items: center;
   gap: 4px;
 }
 
-.stat-filename .value {
-  // Filenames are arbitrary strings; allow ellipsis-truncation at
-  // narrow viewports rather than wrapping. The status bar is single-
-  // line at < 768px (see narrow-viewport block below).
+.stat-identity .value {
+  // Filenames + blob slugs are arbitrary-length strings; allow
+  // ellipsis-truncation at narrow viewports rather than wrapping.
+  // The status bar is single-line at < 768px (see narrow-viewport
+  // block below).
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
