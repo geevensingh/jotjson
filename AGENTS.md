@@ -533,7 +533,7 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
 ### CI Insights (Mergify)
 
 After each test job, CI uploads the suite's JUnit XML to Mergify CI Insights
-via `mergifyio/gha-mergify-ci@v17`. Wired suites: **api unit**, **api
+via `mergifyio/gha-mergify-ci@v20`. Wired suites: **api unit**, **api
 integration**, **web unit** (Vitest), **e2e** (Playwright). Dashboards live
 at `https://dashboard.mergify.com/ci-insights/jobs`. JUnit artifacts and
 `dorny/test-reporter` PR check-runs are unchanged and remain the canonical

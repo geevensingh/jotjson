@@ -1186,9 +1186,11 @@ const TELEMETRY_MESSAGE_IDS = [
    *   the closed enum from `core/title-suggester/types.ts`:
    *   `filename | packageJson | kubernetes | openapi | jsonSchema |
    *    geojson | armTemplate | tsconfig | githubActionsWorkflow |
-   *    postmanCollection | selfUrl | namedField | typeField |
-   *    topLevelKeys | descriptionFallback | arrayShape | objectShape |
-   *    primitive | firstChars | untitled | dateStamped |
+   *    postmanCollection | cloudEvent | jwtPayload |
+   *    microsoftCommerceBillingEvent | applicationInsightsTelemetry |
+   *    eventEnvelope | selfUrl | identifierField | namedField |
+   *    typeField | topLevelKeys | descriptionFallback | arrayShape |
+   *    objectShape | primitive | firstChars | untitled | dateStamped |
    *    numberedUntitled`.
    * Measurements: { candidateCount: number } -- raw 2..7, the size
    *   of the menu the user picked from (post-cap, post-floor). Useful
