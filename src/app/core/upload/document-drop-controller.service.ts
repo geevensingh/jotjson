@@ -158,15 +158,25 @@ export class DocumentDropController {
       this.ngZone.run(() => this.showOffEditorSnackbar());
       return;
     }
-    // Per-item handle resolution. Each item produces either a writable
-    // FileSystemFileHandle (Chromium with the File System Access API)
-    // or null (Safari/Firefox, non-'file' items, or per-item rejection).
-    // Per-item null, not whole-drop fallback: a heterogeneous drop with
-    // some handle-able items and some not still feeds the handle-able
-    // ones through with a non-null slot at the right index. Today
-    // HomeComponent only ever consumes the first item, but the wider
-    // shape avoids a re-spec when multi-file lands.
-    void this.dispatchHandlerWithHandles(handler, files, items);
+    // Per-item handle resolution. Each item in `files` produces either
+    // a writable FileSystemFileHandle (Chromium with the File System
+    // Access API) or null (Safari/Firefox, per-item rejection, or
+    // unrecoverable mismatch). Per-item null, not whole-drop fallback:
+    // a heterogeneous drop with some handle-able items and some not
+    // still feeds the handle-able ones through with a non-null slot
+    // at the right index. Today HomeComponent only ever consumes the
+    // first item, but the wider shape avoids a re-spec when multi-
+    // file lands.
+    this.dispatchHandlerWithHandles(handler, files, items).catch((cause) => {
+      // The handler closure or the per-item handle resolution can
+      // throw; an unobserved rejection here would surface as an
+      // unhandled-promise warning in the browser and a noisy test
+      // failure with no useful context. Reroute to the existing
+      // console-warn channel (DocumentDropController already uses
+      // console.warn for late-dispose; matching it keeps the dev-
+      // tools signal in one place).
+      console.warn('[DocumentDropController] drop dispatch failed', cause);
+    });
   };
 
   private async dispatchHandlerWithHandles(
@@ -174,21 +184,30 @@ export class DocumentDropController {
     files: readonly File[],
     items: readonly DataTransferItem[],
   ): Promise<void> {
+    // `dataTransfer.files` is the canonical authority on file order
+    // and count; `dataTransfer.items` may include non-file entries
+    // (e.g., text/uri-list, text/plain) interspersed with the file
+    // items. Walk `files` and pull each File's matching handle out of
+    // the `file`-kind subset of `items` by index, so a heterogeneous
+    // drop like [file, text/uri-list, file] still pairs the right
+    // handles with the right files.
+    const fileItems = items.filter((item) => item.kind === 'file');
     const handles = await Promise.all(
-      items.map(async (item) => {
-        if (item.kind !== 'file') return null;
-        if (typeof item.getAsFileSystemHandle !== 'function') return null;
+      files.map(async (_file, index) => {
+        const fileItem = fileItems[index];
+        if (!fileItem) return null;
+        if (typeof fileItem.getAsFileSystemHandle !== 'function') return null;
         try {
-          const handle = await item.getAsFileSystemHandle();
+          const handle = await fileItem.getAsFileSystemHandle();
           return handle?.kind === 'file' ? (handle as FileSystemFileHandle) : null;
         } catch {
           return null;
         }
       }),
     );
-    this.ngZone.run(() => {
-      void handler(files, handles);
-    });
+    // Await the handler so an async rejection bubbles to the caller's
+    // .catch() in onDrop instead of becoming an unhandled-promise.
+    await this.ngZone.run(() => Promise.resolve(handler(files, handles)));
   }
 
   private readonly onDragEnd = (): void => {

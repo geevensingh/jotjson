@@ -80,6 +80,17 @@ export class ToolbarComponent {
   private readonly loggerService = inject(LoggerService);
   private readonly fileAccess = inject(FileAccessService);
 
+  /**
+   * Dedup flag for the `file.openPicker.unsupported` telemetry event.
+   * The token is documented as one-shot per LoggerService lifetime
+   * (`core/telemetry/telemetry-message-ids.ts`); without this guard,
+   * repeated Upload clicks on Safari/Firefox would log the same
+   * constant signal once per click, inflating analytics + spamming
+   * the dev console. ToolbarComponent is provided once at the app
+   * root so a per-instance boolean is functionally per-session.
+   */
+  private openPickerUnsupportedLogged = false;
+
   readonly hasContent = input<boolean>(false);
   readonly title = input<string>('');
   readonly canSave = input<boolean>(false);
@@ -388,7 +399,10 @@ export class ToolbarComponent {
       void this.openViaPicker();
       return;
     }
-    this.loggerService.info('file.openPicker.unsupported');
+    if (!this.openPickerUnsupportedLogged) {
+      this.openPickerUnsupportedLogged = true;
+      this.loggerService.info('file.openPicker.unsupported');
+    }
     this.fileInput().nativeElement.click();
   }
 

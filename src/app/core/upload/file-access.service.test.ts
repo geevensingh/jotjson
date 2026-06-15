@@ -312,7 +312,7 @@ describe('FileAccessService', () => {
       await expectFailureCause(() => service.saveToFile(fake.handle, 'data'), 'aborted');
     });
 
-    it('maps unknown errors to writeError and preserves the underlyingCause', async () => {
+    it('maps unknown errors to writeError and preserves the underlying Error.cause', async () => {
       const cause = new Error('something else');
       const writable = makeWritable({ close: vi.fn().mockRejectedValue(cause) });
       const fake = makeFakeHandle({ writable });

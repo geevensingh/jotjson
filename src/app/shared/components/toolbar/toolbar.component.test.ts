@@ -1864,6 +1864,21 @@ describe('ToolbarComponent file-backed UI (M-PWA write-back Phase 4a)', () => {
       expect(logger.info).toHaveBeenCalledWith('file.openPicker.unsupported');
     });
 
+    it('dedupes file.openPicker.unsupported across repeated clicks on the same instance', async () => {
+      const fileAccess = makeFakeFileAccess({ hasFileSystemAccess: false });
+      const { fixture, logger } = await createWithFileAccess({ fileAccess });
+
+      fixture.componentInstance.triggerFilePicker();
+      fixture.componentInstance.triggerFilePicker();
+      fixture.componentInstance.triggerFilePicker();
+      await Promise.resolve();
+
+      const unsupportedCalls = logger.info.mock.calls.filter(
+        (args) => args[0] === 'file.openPicker.unsupported',
+      );
+      expect(unsupportedCalls).toHaveLength(1);
+    });
+
     it('does NOT emit localFilePicked when the user cancels the picker (null result)', async () => {
       const fileAccess = makeFakeFileAccess({ hasFileSystemAccess: true, openResult: null });
       const { fixture } = await createWithFileAccess({ fileAccess });

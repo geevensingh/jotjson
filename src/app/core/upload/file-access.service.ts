@@ -26,8 +26,9 @@ import { Injectable, PLATFORM_ID, inject } from '@angular/core';
  * - **`'diskFull'`**: out-of-space write. Maps to
  *   `QuotaExceededError`.
  * - **`'writeError'`**: catch-all for any other failure during write.
- *   The original cause is preserved on `FileAccessError.underlyingCause`
- *   for log inspection but not surfaced to the user.
+ *   The original cause is preserved on the standard `Error.cause`
+ *   field (set via the Error constructor's options bag) for log
+ *   inspection but not surfaced to the user.
  * - **`'noHandle'`**: defensive bucket for a caller that asks to save
  *   without first attaching a handle. Should never fire in production
  *   if `HomeComponent.onSave` correctly gates on
@@ -65,9 +66,9 @@ export class FileAccessError extends Error {
   constructor(
     public readonly kind: FileAccessFailureCause,
     message?: string,
-    underlyingCause?: unknown,
+    cause?: unknown,
   ) {
-    super(message ?? kind, underlyingCause !== undefined ? { cause: underlyingCause } : undefined);
+    super(message ?? kind, cause !== undefined ? { cause } : undefined);
     this.name = 'FileAccessError';
   }
 }
@@ -106,10 +107,27 @@ export interface SaveToFileResult {
 }
 
 /**
- * The standard MIME + extension dict the JotJSON file pickers accept.
- * Matches `manifest.webmanifest`'s `file_handlers[0].accept` so the
- * in-app picker offers the same set of types as the OS file-association
- * launch path. Extension lists are typed as mutable arrays because the
+ * The MIME + extension dict the JotJSON file pickers accept.
+ *
+ * Mirrors `public/manifest.webmanifest`'s `file_handlers[0].accept`
+ * key-for-key (PR #389 + Phase 5 of M-PWA-write-back): same MIME
+ * assignments for `.json`, `.jsonc`, `.json5`, `.webmanifest` so the
+ * Chromium in-app picker filter offers the same extension set as
+ * the OS file-association launch path. A user reaching for "the JSON
+ * file I just edited via Open With" should not see a different
+ * extension list in the toolbar Upload picker.
+ *
+ * `.jsonc` is registered under `text/plain` (matching the manifest)
+ * rather than `application/json` because `application/json` strictly
+ * disallows comments per RFC 8259; modern Chromium honors the MIME
+ * key when filtering picker results, and folding `.jsonc` into the
+ * `application/json` entry would cause the picker UI to list `.jsonc`
+ * inconsistently with the OS-level file-type description.
+ *
+ * `description` is provided per accept entry so the picker's "file
+ * type" selector reads as a human label rather than the bare MIME.
+ *
+ * Extension lists are typed as mutable arrays because the
  * `FilePickerAcceptType.accept` ambient signature accepts either a
  * single string or a string array, and a `readonly` array trips its
  * variance check.
@@ -118,8 +136,10 @@ const ACCEPT_TYPES: readonly FilePickerAcceptType[] = [
   {
     description: 'JSON',
     accept: {
-      'application/json': ['.json', '.jsonc'],
+      'application/json': ['.json'],
+      'text/plain': ['.jsonc'],
       'application/json5': ['.json5'],
+      'application/manifest+json': ['.webmanifest'],
     },
   },
 ];
@@ -149,9 +169,14 @@ const ACCEPT_TYPES: readonly FilePickerAcceptType[] = [
  *   {@link requestWritePermission} which `HomeComponent.onSave`
  *   invokes inside the Save-click handler.
  *
- * In all paths, `saveToFile` re-checks permission via `queryPermission`
- * before each write so a mid-session revocation is caught and mapped
- * to `'permissionDeniedRevoked'`.
+ * In all paths, `createWritable()` itself enforces the permission
+ * gate: it throws `NotAllowedError` when readwrite has not been
+ * granted, which `saveToFile` maps to the closed-enum
+ * `'permissionDeniedRevoked'` cause. We deliberately do NOT
+ * pre-query permission on the save path -- the spec-defined throw
+ * is sufficient and skipping the query keeps a successful save to
+ * one round-trip. A revoked grant therefore surfaces at the moment
+ * of write rather than as a separate pre-check.
  *
  * Server-platform safety: the constructor performs NO `window.*`,
  * `navigator.*`, or DOM access. Feature-detect predicates live in
@@ -180,10 +205,14 @@ export class FileAccessService {
   }
 
   /**
-   * Opens the OS file picker for a `.json` / `.jsonc` / `.json5` file
-   * with `mode: 'readwrite'`. On a successful pick, proactively calls
-   * `handle.requestPermission({mode: 'readwrite'})` inside the same
-   * gesture so the first Save is silent.
+   * Opens the OS file picker for a `.json` / `.jsonc` / `.json5` /
+   * `.webmanifest` file. The W3C `OpenFilePickerOptions` does NOT
+   * carry a `mode` member (that's `showSaveFilePicker`'s surface);
+   * `showOpenFilePicker` always resolves with read-permission
+   * handles, and we upgrade to readwrite immediately after by
+   * calling `handle.requestPermission({mode: 'readwrite'})` inside
+   * the same user gesture so the first Save is silent. See
+   * {@link adoptHandleWithWritePermission} for the post-pick step.
    *
    * Resolves `null` if the user cancels the picker (`AbortError`).
    * Throws `FileAccessError`:
@@ -191,7 +220,7 @@ export class FileAccessService {
    * - `'permissionDeniedInitial'` if the user denies the
    *   `requestPermission` prompt.
    * - `'writeError'` for any other failure (with the original cause
-   *   on `underlyingCause`).
+   *   on `Error.cause`).
    */
   async openLocalFile(): Promise<OpenLocalFileResult | null> {
     if (!this.hasFileSystemAccess()) {
@@ -250,7 +279,7 @@ export class FileAccessService {
    * - `'notFound'` on `NotFoundError`
    * - `'diskFull'` on `QuotaExceededError`
    * - `'aborted'` on `AbortError`
-   * - `'writeError'` otherwise (original cause on `underlyingCause`)
+   * - `'writeError'` otherwise (original cause on `Error.cause`)
    *
    * Does NOT proactively call `requestPermission`. Callers in the
    * deferred path are expected to call {@link requestWritePermission}

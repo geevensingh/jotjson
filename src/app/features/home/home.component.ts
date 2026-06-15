@@ -3620,7 +3620,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       // mid-session revocation as 'denied'.
       const permission = await this.fileAccess.requestWritePermission(backing.handle);
       if (permission !== 'granted') {
-        this.openFileSaveFailureSnackbar('permissionDeniedInitial', text);
+        this.openFileSaveFailureSnackbar('permissionDeniedInitial');
         return;
       }
       const { lastModified } = await this.fileAccess.saveToFile(backing.handle, text);
@@ -3649,7 +3649,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     } catch (cause) {
       const kind: FileAccessFailureCause =
         cause instanceof FileAccessError ? cause.kind : 'writeError';
-      this.openFileSaveFailureSnackbar(kind, text);
+      this.openFileSaveFailureSnackbar(kind);
     } finally {
       this.saveInFlight.set(false);
     }
@@ -3708,7 +3708,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     } catch (cause) {
       const kind: FileAccessFailureCause =
         cause instanceof FileAccessError ? cause.kind : 'writeError';
-      this.openFileSaveFailureSnackbar(kind, text);
+      this.openFileSaveFailureSnackbar(kind);
     } finally {
       this.saveInFlight.set(false);
     }
@@ -3740,7 +3740,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    * Always fires `file.save.failed` telemetry with the closed-enum
    * cause.
    */
-  private openFileSaveFailureSnackbar(cause: FileSaveFailureCause, _text: string): void {
+  private openFileSaveFailureSnackbar(cause: FileSaveFailureCause): void {
     this.logger.warn('file.save.failed', { cause });
     const message = this.formatFileSaveFailureMessage(cause);
     const offersSaveAs =

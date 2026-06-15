@@ -2403,9 +2403,23 @@ const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: warn
-   * Fired by: `HomeComponent.onSave` (kind: 'file' branch) and
-   *           `HomeComponent.onSaveAsNewFile` on any
-   *           `FileAccessError` thrown from `FileAccessService`.
+   * Fired by:
+   *   - `HomeComponent.onSave` (kind: 'file' branch) and
+   *     `HomeComponent.onSaveAsNewFile` on any `FileAccessError`
+   *     thrown from `FileAccessService` -- the primary save and
+   *     save-as paths' failure surface.
+   *   - `HomeComponent.onFilesReceived` validator-rejection branch
+   *     (`'tooLarge'` / `'binary'`) when an adoption that carried
+   *     a writable handle is dropped by the upload validator
+   *     before the handle reaches the document backing.
+   *   - `ToolbarComponent.openViaPicker` when
+   *     `FileAccessService.openLocalFile` throws during a Chromium
+   *     picker open (e.g., a user-cancel maps to `null` not a
+   *     throw, but `permissionDeniedInitial` from the proactive
+   *     `requestPermission` at adoption time, or an unexpected
+   *     `writeError` from the picker itself, both throw and route
+   *     here). The toolbar's emission lets dashboards see picker-
+   *     open failures even though no save was ever attempted.
    *
    * Props:
    *   { cause: 'permissionDeniedInitial' | 'permissionDeniedRevoked'
@@ -2416,7 +2430,7 @@ const TELEMETRY_MESSAGE_IDS = [
    *   (`file-access.service.ts`). `'tooLarge'` and `'binary'` are
    *   added for the upload-validator-rejected adoption path
    *   (handle is dropped before any save); the rest fire from save
-   *   attempts.
+   *   attempts and picker opens.
    *
    * Privacy: no filename. The originating `Error.cause` is logged via
    * the LoggerService's normal error handling, not surfaced as a prop.

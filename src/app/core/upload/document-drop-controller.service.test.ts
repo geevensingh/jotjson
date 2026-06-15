@@ -223,6 +223,64 @@ describe('DocumentDropController', () => {
     expect(navigateByUrl).toHaveBeenCalledWith('/');
   });
 
+  it('pairs handles to files when items contains interspersed non-file entries', async () => {
+    // dataTransfer.items can include non-'file' entries (e.g.,
+    // text/uri-list when a drag carries both a file and a URL).
+    // dataTransfer.files contains only the File subset. The handler
+    // must receive handles aligned to files by walking files and
+    // pulling handles from the 'file'-kind items by file-index.
+    const handler = vi.fn();
+    controller.registerEditorHandler(handler);
+    const fileA = makeFile('a.json', '{"a":1}');
+    const fileB = makeFile('b.json', '{"b":2}');
+    const handleA = makeFakeHandle('a.json');
+    const handleB = makeFakeHandle('b.json');
+    const fileItemA: Partial<DataTransferItem> = {
+      kind: 'file',
+      getAsFileSystemHandle: vi.fn().mockResolvedValue(handleA),
+    };
+    const urlItem: Partial<DataTransferItem> = {
+      kind: 'string',
+      // No getAsFileSystemHandle on a non-file item.
+    };
+    const fileItemB: Partial<DataTransferItem> = {
+      kind: 'file',
+      getAsFileSystemHandle: vi.fn().mockResolvedValue(handleB),
+    };
+
+    document.dispatchEvent(
+      makeDragEvent('drop', {
+        files: [fileA, fileB],
+        items: [fileItemA, urlItem, fileItemB],
+      }),
+    );
+    await flushMicrotasks();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const passedFiles = handler.mock.lastCall![0] as readonly File[];
+    const passedHandles = handler.mock.lastCall![1] as readonly (FileSystemFileHandle | null)[];
+    // handles is aligned to files, not to items.
+    expect(passedFiles).toEqual([fileA, fileB]);
+    expect(passedHandles).toHaveLength(2);
+    expect(passedHandles[0]).toBe(handleA);
+    expect(passedHandles[1]).toBe(handleB);
+  });
+
+  it('routes an async handler rejection through console.warn instead of unhandled-promise', async () => {
+    const warn = vi.spyOn(console, 'warn');
+    const handler = vi.fn().mockRejectedValue(new Error('handler boom'));
+    controller.registerEditorHandler(handler);
+
+    document.dispatchEvent(makeDragEvent('drop', { files: [makeFile()] }));
+    await flushMicrotasks();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const calls = warn.mock.calls.filter(
+      (args) => typeof args[0] === 'string' && (args[0] as string).includes('drop dispatch failed'),
+    );
+    expect(calls.length).toBe(1);
+  });
+
   it('always calls preventDefault on dragover with files', () => {
     const event = makeDragEvent('dragover', { files: [makeFile()] });
     const preventDefault = vi.spyOn(event, 'preventDefault');
