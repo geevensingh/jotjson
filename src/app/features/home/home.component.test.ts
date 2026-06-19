@@ -33,6 +33,7 @@ import { QuotaNotificationService } from '../../core/quota/quota-notification.se
 import { bucketBytes } from '../../core/telemetry/buckets';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
+import { FileAccessService } from '../../core/upload/file-access.service';
 import {
   LaunchQueueController,
   type LaunchEvent,
@@ -4333,19 +4334,28 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
 
   class FakeDropController {
     readonly dropActive = signal(false);
-    registeredHandler?: (files: readonly File[]) => void;
+    registeredHandler?: (
+      files: readonly File[],
+      handles: readonly (FileSystemFileHandle | null)[],
+    ) => void | Promise<void>;
     readonly dispose = vi.fn();
     readonly registerEditorHandler = vi
       .fn()
-      .mockImplementation((handler: (files: readonly File[]) => void) => {
-        this.registeredHandler = handler;
-        return this.dispose;
-      });
+      .mockImplementation(
+        (
+          handler: (
+            files: readonly File[],
+            handles: readonly (FileSystemFileHandle | null)[],
+          ) => void | Promise<void>,
+        ) => {
+          this.registeredHandler = handler;
+          return this.dispose;
+        },
+      );
   }
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -4460,7 +4470,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
       text: () => Promise.resolve(text),
       arrayBuffer: () => Promise.resolve(new TextEncoder().encode(text).buffer),
     } as unknown as File;
-    handler([file]);
+    handler([file], [null]);
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
     expect(fixture.componentInstance.content()).toBe(text);
@@ -4485,7 +4495,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     const before = fixture.componentInstance.content();
     const file1 = new File(['{"a":1}'], 'a.json');
     const file2 = new File(['{"b":2}'], 'b.json');
-    fakeController.registeredHandler!([file1, file2]);
+    fakeController.registeredHandler!([file1, file2], [null, null]);
     await Promise.resolve();
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
@@ -4497,7 +4507,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     const { fixture, fakeController, snack } = setup();
     const before = fixture.componentInstance.content();
     const warnSpy = vi.spyOn(console, 'warn');
-    fakeController.registeredHandler!([makeOversizedFile()]);
+    fakeController.registeredHandler!([makeOversizedFile()], [null]);
     await Promise.resolve();
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
@@ -4511,7 +4521,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   it('drop where File.text() rejects toasts readFailed without upload.handle telemetry', async () => {
     const { fakeController, snack } = setup();
     const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-    fakeController.registeredHandler!([makeRejectingFile()]);
+    fakeController.registeredHandler!([makeRejectingFile()], [null]);
     await waitForTaskQueue();
     expect(snack.open).toHaveBeenCalledTimes(1);
     expect(snack.open.mock.lastCall![0]).toContain('Could not read');
@@ -4562,7 +4572,11 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
       arrayBuffer: () => Promise.resolve(new TextEncoder().encode(text).buffer),
     } as unknown as File;
     const handler = fakeLaunch.registeredHandler!;
-    const event: LaunchEvent = { kind: 'files', files: [file] };
+    const event: LaunchEvent = {
+      kind: 'files',
+      entries: [{ file, handle: null }],
+      targetURL: 'https://jotjson.com/',
+    };
     await handler(event);
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -4963,19 +4977,28 @@ describe('HomeComponent extract-banner telemetry', () => {
 
   class FakeDropController {
     readonly dropActive = signal(false);
-    registeredHandler?: (files: readonly File[]) => void;
+    registeredHandler?: (
+      files: readonly File[],
+      handles: readonly (FileSystemFileHandle | null)[],
+    ) => void | Promise<void>;
     readonly dispose = vi.fn();
     readonly registerEditorHandler = vi
       .fn()
-      .mockImplementation((handler: (files: readonly File[]) => void) => {
-        this.registeredHandler = handler;
-        return this.dispose;
-      });
+      .mockImplementation(
+        (
+          handler: (
+            files: readonly File[],
+            handles: readonly (FileSystemFileHandle | null)[],
+          ) => void | Promise<void>,
+        ) => {
+          this.registeredHandler = handler;
+          return this.dispose;
+        },
+      );
   }
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -5086,7 +5109,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     });
     expect(drop.registeredHandler).toBeDefined();
 
-    drop.registeredHandler!([file]);
+    drop.registeredHandler!([file], [null]);
     await waitForTaskQueue();
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -5109,7 +5132,11 @@ describe('HomeComponent extract-banner telemetry', () => {
     });
     expect(launch.registeredHandler).toBeDefined();
 
-    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    await launch.registeredHandler!({
+      kind: 'files',
+      entries: [{ file, handle: null }],
+      targetURL: 'https://jotjson.com/',
+    });
     await waitForTaskQueue();
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -5307,7 +5334,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
       type: 'text/plain',
     });
-    drop.registeredHandler!([file]);
+    drop.registeredHandler!([file], [null]);
     await waitForTaskQueue();
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -5361,7 +5388,7 @@ describe('HomeComponent extract-banner telemetry', () => {
       type: 'text/plain',
     });
 
-    drop.registeredHandler!([file]);
+    drop.registeredHandler!([file], [null]);
     await waitForTaskQueue();
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -5485,19 +5512,28 @@ describe('HomeComponent upload-error banner (#36)', () => {
 
   class FakeDropController {
     readonly dropActive = signal(false);
-    registeredHandler?: (files: readonly File[]) => void;
+    registeredHandler?: (
+      files: readonly File[],
+      handles: readonly (FileSystemFileHandle | null)[],
+    ) => void | Promise<void>;
     readonly dispose = vi.fn();
     readonly registerEditorHandler = vi
       .fn()
-      .mockImplementation((handler: (files: readonly File[]) => void) => {
-        this.registeredHandler = handler;
-        return this.dispose;
-      });
+      .mockImplementation(
+        (
+          handler: (
+            files: readonly File[],
+            handles: readonly (FileSystemFileHandle | null)[],
+          ) => void | Promise<void>,
+        ) => {
+          this.registeredHandler = handler;
+          return this.dispose;
+        },
+      );
   }
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -5685,7 +5721,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
       arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":').buffer),
     } as unknown as File;
 
-    fakeController.registeredHandler!([file]);
+    fakeController.registeredHandler!([file], [null]);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -5704,7 +5740,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
       arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":1}').buffer),
     } as unknown as File;
 
-    fakeController.registeredHandler!([file]);
+    fakeController.registeredHandler!([file], [null]);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -5748,19 +5784,28 @@ describe('HomeComponent binary upload rejection (#62)', () => {
 
   class FakeDropController {
     readonly dropActive = signal(false);
-    registeredHandler?: (files: readonly File[]) => void;
+    registeredHandler?: (
+      files: readonly File[],
+      handles: readonly (FileSystemFileHandle | null)[],
+    ) => void | Promise<void>;
     readonly dispose = vi.fn();
     readonly registerEditorHandler = vi
       .fn()
-      .mockImplementation((handler: (files: readonly File[]) => void) => {
-        this.registeredHandler = handler;
-        return this.dispose;
-      });
+      .mockImplementation(
+        (
+          handler: (
+            files: readonly File[],
+            handles: readonly (FileSystemFileHandle | null)[],
+          ) => void | Promise<void>,
+        ) => {
+          this.registeredHandler = handler;
+          return this.dispose;
+        },
+      );
   }
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -5833,7 +5878,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
       text: () => Promise.resolve(''),
       arrayBuffer: () => Promise.resolve(pngBytes.buffer),
     } as unknown as File;
-    fakeController.registeredHandler!([fakePng]);
+    fakeController.registeredHandler!([fakePng], [null]);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -7387,7 +7432,6 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -7617,7 +7661,11 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
 
     expect(launch.registeredHandler).toBeDefined();
     const file = new File(['{"next":1}'], 'launched.json');
-    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    await launch.registeredHandler!({
+      kind: 'files',
+      entries: [{ file, handle: null }],
+      targetURL: 'https://jotjson.com/',
+    });
     expect(component.content()).toBe('{"next":1}');
     expect(component.lastFilename()).toBe('launched.json');
 
@@ -7642,7 +7690,11 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
 
     expect(launch.registeredHandler).toBeDefined();
     const file = new File(['{"next":2}'], 'launched.json');
-    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    await launch.registeredHandler!({
+      kind: 'files',
+      entries: [{ file, handle: null }],
+      targetURL: 'https://jotjson.com/',
+    });
     expect(component.content()).toBe('{"next":2}');
 
     eventSpy.mockClear();
@@ -7969,5 +8021,281 @@ describe('HomeComponent splash render-complete hook (Phase C)', () => {
       splash.markBlobRenderComplete,
       'after the second rAF (paint barrier crossed) the hook must fire so render-pending clears',
     ).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('HomeComponent file-backed flow (M-PWA write-back Phase 3b)', () => {
+  function makeFile(name = 'data.json', content = '{"k":1}'): File {
+    return new File([content], name, {
+      type: 'application/json',
+      lastModified: 1_700_000_000_000,
+    });
+  }
+
+  function makeFakeHandle(name = 'data.json'): FileSystemFileHandle {
+    return {
+      kind: 'file' as const,
+      name,
+    } as unknown as FileSystemFileHandle;
+  }
+
+  class FakeLaunchQueueController {
+    registeredHandler?: LaunchHandler;
+    readonly dispose = vi.fn();
+    readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
+      this.registeredHandler = handler;
+      return this.dispose;
+    });
+  }
+
+  type FakeFileAccess = {
+    hasFileSystemAccess: Mock;
+    openLocalFile: Mock;
+    requestWritePermission: Mock;
+    saveToFile: Mock;
+    saveAsNewFile: Mock;
+  };
+
+  function makeFakeFileAccess(overrides: Partial<FakeFileAccess> = {}): FakeFileAccess {
+    return {
+      hasFileSystemAccess: vi.fn().mockReturnValue(true),
+      openLocalFile: vi.fn().mockResolvedValue(null),
+      requestWritePermission: vi.fn().mockResolvedValue('granted' as PermissionState),
+      saveToFile: vi.fn().mockResolvedValue({ lastModified: 1_700_000_000_500 }),
+      saveAsNewFile: vi.fn().mockResolvedValue(null),
+      ...overrides,
+    };
+  }
+
+  function setup(fileAccessOverrides: Partial<FakeFileAccess> = {}): {
+    fixture: ComponentFixture<HomeComponent>;
+    fakeLaunch: FakeLaunchQueueController;
+    fileAccess: FakeFileAccess;
+    snack: { open: Mock };
+    eventSpy: Mock;
+    warnSpy: Mock;
+  } {
+    TestBed.resetTestingModule();
+    const fakeLaunch = new FakeLaunchQueueController();
+    const fileAccess = makeFakeFileAccess(fileAccessOverrides);
+    const snack = { open: vi.fn() };
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: LaunchQueueController, useValue: fakeLaunch },
+        { provide: FileAccessService, useValue: fileAccess },
+        { provide: MatSnackBar, useValue: snack },
+      ],
+    });
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    const logger = TestBed.inject(LoggerService);
+    const eventSpy = vi.spyOn(logger, 'event') as unknown as Mock;
+    const warnSpy = vi.spyOn(logger, 'warn') as unknown as Mock;
+    return { fixture, fakeLaunch, fileAccess, snack, eventSpy, warnSpy };
+  }
+
+  async function adoptFileViaOsLaunch(
+    fakeLaunch: FakeLaunchQueueController,
+    file: File,
+    handle: FileSystemFileHandle | null,
+  ): Promise<void> {
+    await fakeLaunch.registeredHandler!({
+      kind: 'files',
+      entries: [{ file, handle }],
+      targetURL: 'https://jotjson.com/',
+    });
+    // Drain microtasks so the async pipeline (validator + applyReplace + backing set) settles.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it('binds the document to a file backing when launchQueue delivers a handle', async () => {
+    const { fixture, fakeLaunch, eventSpy } = setup();
+    const file = makeFile('data.json', '{"a":1}');
+    const handle = makeFakeHandle('data.json');
+
+    await adoptFileViaOsLaunch(fakeLaunch, file, handle);
+
+    const component = fixture.componentInstance;
+    // loadedBlob is the computed alias over the union; it stays null
+    // for the file variant.
+    expect(component.loadedBlob()).toBeNull();
+    expect(component.lastFilename()).toBe('data.json');
+    expect(eventSpy).toHaveBeenCalledWith(
+      'file.adoptHandle',
+      { source: 'osLaunch', sizeBytesBucket: bucketBytes(file.size) },
+      { sizeBytes: file.size },
+    );
+  });
+
+  it('does NOT bind a file backing when launchQueue delivers null handle', async () => {
+    const { fixture, fakeLaunch, eventSpy } = setup();
+    const file = makeFile('data.json', '{"a":1}');
+
+    await adoptFileViaOsLaunch(fakeLaunch, file, null);
+
+    const component = fixture.componentInstance;
+    expect(component.lastFilename()).toBe('data.json');
+    // file.adoptHandle is gated on a non-null handle.
+    const adoptCalls = eventSpy.mock.calls.filter((args) => args[0] === 'file.adoptHandle');
+    expect(adoptCalls).toHaveLength(0);
+  });
+
+  it('Save on a file-backed document calls saveToFile and logs file.save.success', async () => {
+    const { fixture, fakeLaunch, fileAccess, eventSpy } = setup();
+    const file = makeFile('data.json', '{"a":1}');
+    const handle = makeFakeHandle('data.json');
+    await adoptFileViaOsLaunch(fakeLaunch, file, handle);
+
+    const component = fixture.componentInstance;
+    // Edit the content so dirty flips true.
+    component.onValueChange('{"a":2}');
+    await Promise.resolve();
+    expect(component.dirty()).toBe(true);
+
+    await component.onSave();
+
+    expect(fileAccess.requestWritePermission).toHaveBeenCalledWith(handle);
+    expect(fileAccess.saveToFile).toHaveBeenCalledWith(handle, '{"a":2}');
+    const successCalls = eventSpy.mock.calls.filter((args) => args[0] === 'file.save.success');
+    expect(successCalls).toHaveLength(1);
+    const [, props, measurements] = successCalls[0]!;
+    expect(props).toMatchObject({ kind: 'overwrite' });
+    expect(measurements).toMatchObject({ sizeBytes: new Blob(['{"a":2}']).size });
+    // After a successful save the document is clean again.
+    expect(component.dirty()).toBe(false);
+  });
+
+  it('Save with denied write permission opens the cul-de-sac snackbar with Save-as-new action', async () => {
+    const fileAccess = makeFakeFileAccess({
+      requestWritePermission: vi.fn().mockResolvedValue('denied' as PermissionState),
+    });
+    const { fixture, fakeLaunch, snack, warnSpy } = setup(fileAccess);
+    const file = makeFile('data.json', '{"a":1}');
+    const handle = makeFakeHandle('data.json');
+    await adoptFileViaOsLaunch(fakeLaunch, file, handle);
+
+    const component = fixture.componentInstance;
+    component.onValueChange('{"a":2}');
+    await Promise.resolve();
+    // Adoption opened the "Opened data.json" snackbar; clear it so we
+    // can assert specifically on the post-save snackbar.
+    snack.open.mockClear();
+
+    await component.onSave();
+
+    expect(fileAccess.saveToFile).not.toHaveBeenCalled();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    const args = snack.open.mock.lastCall!;
+    expect(args[1]).toContain('Save as new file');
+    expect(warnSpy).toHaveBeenCalledWith('file.save.failed', { cause: 'permissionDeniedInitial' });
+    // Document stays dirty so the user can retry.
+    expect(component.dirty()).toBe(true);
+  });
+
+  it('file-backed dirty is content-only: highlight edits do NOT flip dirty', async () => {
+    const { fixture, fakeLaunch } = setup();
+    const file = makeFile('data.json', '{"a":1}');
+    const handle = makeFakeHandle('data.json');
+    await adoptFileViaOsLaunch(fakeLaunch, file, handle);
+
+    const component = fixture.componentInstance;
+    expect(component.dirty()).toBe(false);
+
+    // Adding a highlight would dirty a blob-backed document; for a
+    // file-backed document the highlight is in-session and does not
+    // flip the pill (skeptic v2 #5 regression test).
+    component.highlights.set([{ path: '$.a', color: '#ff0000', cascade: false }]);
+    await Promise.resolve();
+    expect(component.dirty()).toBe(false);
+
+    // A content edit DOES flip dirty.
+    component.onValueChange('{"a":2}');
+    await Promise.resolve();
+    expect(component.dirty()).toBe(true);
+  });
+
+  it('canSave is true for an anonymous file-backed user when dirty', async () => {
+    const { fixture, fakeLaunch } = setup();
+    const file = makeFile('data.json', '{"a":1}');
+    const handle = makeFakeHandle('data.json');
+    await adoptFileViaOsLaunch(fakeLaunch, file, handle);
+
+    const component = fixture.componentInstance;
+    // No sign-in (provideFakeAuth defaults to anonymous).
+    expect(component.canSave()).toBe(false);
+
+    // Edit -> dirty -> canSave for the file path despite no auth.
+    component.onValueChange('{"a":2}');
+    await Promise.resolve();
+    expect(component.canSave()).toBe(true);
+  });
+
+  it('onSaveAsNewFile writes via FileAccessService and logs file.save.success kind=saveAs', async () => {
+    const newHandle = makeFakeHandle('renamed.json');
+    const newFile = makeFile('renamed.json', '{"a":2}');
+    const fileAccess = makeFakeFileAccess({
+      saveAsNewFile: vi.fn().mockResolvedValue({
+        file: newFile,
+        handle: newHandle,
+        lastModified: 1_700_000_001_000,
+      }),
+    });
+    const { fixture, eventSpy } = setup(fileAccess);
+    const component = fixture.componentInstance;
+    component.onValueChange('{"a":2}');
+    await Promise.resolve();
+
+    await component.onSaveAsNewFile();
+
+    expect(fileAccess.saveAsNewFile).toHaveBeenCalledWith('{"a":2}', expect.any(String));
+    const successCalls = eventSpy.mock.calls.filter((args) => args[0] === 'file.save.success');
+    expect(successCalls).toHaveLength(1);
+    expect(successCalls[0]![1]).toMatchObject({ kind: 'saveAs' });
+    expect(component.lastFilename()).toBe('renamed.json');
+    expect(component.dirty()).toBe(false);
+  });
+
+  it('onSaveAsNewFile is a no-op when the user cancels the picker', async () => {
+    const fileAccess = makeFakeFileAccess({ saveAsNewFile: vi.fn().mockResolvedValue(null) });
+    const { fixture, eventSpy } = setup(fileAccess);
+    const component = fixture.componentInstance;
+    component.onValueChange('{"a":2}');
+    await Promise.resolve();
+    const dirtyBefore = component.dirty();
+
+    await component.onSaveAsNewFile();
+
+    expect(eventSpy.mock.calls.filter((args) => args[0] === 'file.save.success')).toHaveLength(0);
+    expect(component.dirty()).toBe(dirtyBefore);
+  });
+
+  it('binds adoption telemetry to source=drag when drag-drop delivers a handle', async () => {
+    const { fixture, eventSpy } = setup();
+    const component = fixture.componentInstance;
+    const file = makeFile('dragged.json', '{"a":3}');
+    const handle = makeFakeHandle('dragged.json');
+
+    // Simulate the drop controller calling the registered handler directly.
+    // (Phase 3a wired the async signature; this is what HomeComponent's
+    // ngOnInit closure forwards to onFilesReceived.)
+    await (
+      component as unknown as {
+        onFilesReceived: (
+          files: readonly File[],
+          source: 'drag' | 'pick' | 'osLaunch',
+          handles?: readonly (FileSystemFileHandle | null)[],
+        ) => Promise<void>;
+      }
+    ).onFilesReceived([file], 'drag', [handle]);
+    await Promise.resolve();
+
+    const adoptCalls = eventSpy.mock.calls.filter((args) => args[0] === 'file.adoptHandle');
+    expect(adoptCalls).toHaveLength(1);
+    expect(adoptCalls[0]![1]).toMatchObject({ source: 'drag' });
   });
 });

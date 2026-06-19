@@ -7,6 +7,7 @@ import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testin
 import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
+import { FileAccessService } from '../../../core/upload/file-access.service';
 import { ToolbarComponent } from './toolbar.component';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
@@ -36,8 +37,20 @@ describe('ToolbarComponent', () => {
     localStorage.removeItem(STORAGE_KEY);
   });
 
-  async function create(options: { signedIn?: boolean } = {}) {
-    const logger = { event: vi.fn() } as unknown as Mocked<LoggerService>;
+  async function create(options: { signedIn?: boolean; hasFileSystemAccess?: boolean } = {}) {
+    const logger = {
+      event: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Mocked<LoggerService>;
+    const fileAccess = {
+      hasFileSystemAccess: vi.fn().mockReturnValue(options.hasFileSystemAccess ?? false),
+      openLocalFile: vi.fn().mockResolvedValue(null),
+      requestWritePermission: vi.fn().mockResolvedValue('granted'),
+      saveToFile: vi.fn().mockResolvedValue({ lastModified: 0 }),
+      saveAsNewFile: vi.fn().mockResolvedValue(null),
+    };
     await TestBed.configureTestingModule({
       imports: [ToolbarComponent],
       providers: [
@@ -45,6 +58,7 @@ describe('ToolbarComponent', () => {
         provideRouter([]),
         provideNoopAnimations(),
         { provide: LoggerService, useValue: logger },
+        { provide: FileAccessService, useValue: fileAccess },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ToolbarComponent);
@@ -53,7 +67,7 @@ describe('ToolbarComponent', () => {
       signInFakeUser(auth);
     }
     fixture.detectChanges();
-    return { fixture, prefs: TestBed.inject(PreferencesService), auth, logger };
+    return { fixture, prefs: TestBed.inject(PreferencesService), auth, logger, fileAccess };
   }
 
   type ToolbarInputOptions = {
@@ -1668,6 +1682,233 @@ describe('ToolbarComponent', () => {
         { source: 'filename' },
         { candidateCount: 3 },
       );
+    });
+  });
+});
+
+describe('ToolbarComponent file-backed UI (M-PWA write-back Phase 4a)', () => {
+  function makeFakeHandle(name = 'data.json'): FileSystemFileHandle {
+    return { kind: 'file' as const, name } as unknown as FileSystemFileHandle;
+  }
+
+  type FakeFileAccess = ReturnType<typeof makeFakeFileAccess>;
+
+  function makeFakeFileAccess(
+    opts: {
+      hasFileSystemAccess?: boolean;
+      openResult?: { file: File; handle: FileSystemFileHandle } | null;
+      openError?: unknown;
+    } = {},
+  ) {
+    return {
+      hasFileSystemAccess: vi.fn().mockReturnValue(opts.hasFileSystemAccess ?? true),
+      openLocalFile: opts.openError
+        ? vi.fn().mockRejectedValue(opts.openError)
+        : vi.fn().mockResolvedValue(opts.openResult ?? null),
+      requestWritePermission: vi.fn().mockResolvedValue('granted'),
+      saveToFile: vi.fn().mockResolvedValue({ lastModified: 0 }),
+      saveAsNewFile: vi.fn().mockResolvedValue(null),
+    };
+  }
+
+  async function createWithFileAccess(
+    opts: {
+      signedIn?: boolean;
+      fileAccess?: FakeFileAccess;
+    } = {},
+  ) {
+    const logger = {
+      event: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Mocked<LoggerService>;
+    const fileAccess = opts.fileAccess ?? makeFakeFileAccess();
+    await TestBed.configureTestingModule({
+      imports: [ToolbarComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        provideNoopAnimations(),
+        { provide: LoggerService, useValue: logger },
+        { provide: FileAccessService, useValue: fileAccess },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ToolbarComponent);
+    const auth = TestBed.inject(AuthService);
+    if (opts.signedIn) signInFakeUser(auth);
+    fixture.detectChanges();
+    return { fixture, fileAccess, logger };
+  }
+
+  describe('pillState - file-backed', () => {
+    it('returns saved when file-backed and clean (anonymous)', async () => {
+      const { fixture } = await createWithFileAccess();
+      fixture.componentRef.setInput('isFileBacked', true);
+      fixture.componentRef.setInput('isDirty', false);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.pillState()).toBe('saved');
+    });
+
+    it('returns modified when file-backed and dirty (anonymous)', async () => {
+      const { fixture } = await createWithFileAccess();
+      fixture.componentRef.setInput('isFileBacked', true);
+      fixture.componentRef.setInput('isDirty', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.pillState()).toBe('modified');
+    });
+
+    it('returns saving when saveInFlight regardless of file-backed', async () => {
+      const { fixture } = await createWithFileAccess();
+      fixture.componentRef.setInput('isFileBacked', true);
+      fixture.componentRef.setInput('saveInFlight', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.pillState()).toBe('saving');
+    });
+
+    it('does NOT show signInToSave for file-backed anonymous user', async () => {
+      const { fixture } = await createWithFileAccess();
+      fixture.componentRef.setInput('isFileBacked', true);
+      // Default: not signed in, no blob loaded.
+      fixture.detectChanges();
+      expect(fixture.componentInstance.pillState()).not.toBe('signInToSave');
+    });
+  });
+
+  describe('showSaveBlock - lift Save out of *jjSignedIn', () => {
+    it('hides Save block for anonymous draft user (no regression)', async () => {
+      const { fixture } = await createWithFileAccess({ signedIn: false });
+      fixture.componentRef.setInput('isFileBacked', false);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.showSaveBlock()).toBe(false);
+    });
+
+    it('shows Save block for anonymous file-backed user (new)', async () => {
+      const { fixture } = await createWithFileAccess({ signedIn: false });
+      fixture.componentRef.setInput('isFileBacked', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.showSaveBlock()).toBe(true);
+    });
+
+    it('shows Save block for signed-in user (no regression)', async () => {
+      const { fixture } = await createWithFileAccess({ signedIn: true });
+      fixture.componentRef.setInput('isFileBacked', false);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.showSaveBlock()).toBe(true);
+    });
+  });
+
+  describe('showOverflowMenu - file-backed branch', () => {
+    it('shows overflow when file-backed (anonymous-OK)', async () => {
+      const { fixture } = await createWithFileAccess({ signedIn: false });
+      fixture.componentRef.setInput('isFileBacked', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.showOverflowMenu()).toBe(true);
+    });
+
+    it('shows overflow when signed-in user owns the blob (no regression)', async () => {
+      const { fixture } = await createWithFileAccess({ signedIn: true });
+      fixture.componentRef.setInput('isOwnedBlob', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.showOverflowMenu()).toBe(true);
+    });
+
+    it('hides overflow for unowned blob + non-file-backed', async () => {
+      const { fixture } = await createWithFileAccess({ signedIn: true });
+      fixture.componentRef.setInput('isSavedBlob', true);
+      fixture.componentRef.setInput('isOwnedBlob', false);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.showOverflowMenu()).toBe(false);
+    });
+  });
+
+  describe('triggerFilePicker - showOpenFilePicker upgrade', () => {
+    it('calls fileAccess.openLocalFile on Chromium with hasFileSystemAccess=true', async () => {
+      const fileAccess = makeFakeFileAccess({ hasFileSystemAccess: true });
+      const { fixture } = await createWithFileAccess({ fileAccess });
+
+      fixture.componentInstance.triggerFilePicker();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(fileAccess.openLocalFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits localFilePicked when the picker resolves with file + handle', async () => {
+      const file = new File(['{}'], 'data.json', { type: 'application/json' });
+      const handle = makeFakeHandle('data.json');
+      const fileAccess = makeFakeFileAccess({
+        hasFileSystemAccess: true,
+        openResult: { file, handle },
+      });
+      const { fixture } = await createWithFileAccess({ fileAccess });
+      const pickedSpy = vi.fn();
+      fixture.componentInstance.localFilePicked.subscribe(pickedSpy);
+
+      fixture.componentInstance.triggerFilePicker();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(pickedSpy).toHaveBeenCalledTimes(1);
+      expect(pickedSpy).toHaveBeenCalledWith({ file, handle });
+    });
+
+    it('falls back to <input type=file> on non-Chromium and logs file.openPicker.unsupported', async () => {
+      const fileAccess = makeFakeFileAccess({ hasFileSystemAccess: false });
+      const { fixture, logger } = await createWithFileAccess({ fileAccess });
+
+      fixture.componentInstance.triggerFilePicker();
+      await Promise.resolve();
+
+      expect(fileAccess.openLocalFile).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('file.openPicker.unsupported');
+    });
+
+    it('dedupes file.openPicker.unsupported across repeated clicks on the same instance', async () => {
+      const fileAccess = makeFakeFileAccess({ hasFileSystemAccess: false });
+      const { fixture, logger } = await createWithFileAccess({ fileAccess });
+
+      fixture.componentInstance.triggerFilePicker();
+      fixture.componentInstance.triggerFilePicker();
+      fixture.componentInstance.triggerFilePicker();
+      await Promise.resolve();
+
+      const unsupportedCalls = logger.info.mock.calls.filter(
+        (args) => args[0] === 'file.openPicker.unsupported',
+      );
+      expect(unsupportedCalls).toHaveLength(1);
+    });
+
+    it('does NOT emit localFilePicked when the user cancels the picker (null result)', async () => {
+      const fileAccess = makeFakeFileAccess({ hasFileSystemAccess: true, openResult: null });
+      const { fixture } = await createWithFileAccess({ fileAccess });
+      const pickedSpy = vi.fn();
+      fixture.componentInstance.localFilePicked.subscribe(pickedSpy);
+
+      fixture.componentInstance.triggerFilePicker();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(pickedSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Save tooltip - filename', () => {
+    it('shows filename in the tooltip when file-backed', async () => {
+      const { fixture } = await createWithFileAccess();
+      fixture.componentRef.setInput('isFileBacked', true);
+      fixture.componentRef.setInput('filename', 'data.json');
+      fixture.componentRef.setInput('canSave', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.saveTooltip()).toContain('data.json');
+    });
+
+    it('falls back to empty tooltip when canSave is true and not file-backed', async () => {
+      const { fixture } = await createWithFileAccess({ signedIn: true });
+      fixture.componentRef.setInput('canSave', true);
+      fixture.componentRef.setInput('isFileBacked', false);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.saveTooltip()).toBe('');
     });
   });
 });
