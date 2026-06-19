@@ -420,3 +420,124 @@ describe('StatusBarComponent', () => {
     });
   });
 });
+
+describe('StatusBarComponent identity stat (M-PWA write-back Phase 4b + blob indicator)', () => {
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ imports: [StatusBarComponent] });
+  });
+
+  function createWithIdentity(
+    identity: { kind: 'file'; filename: string } | { kind: 'blob'; slug: string } | null,
+  ) {
+    const fixture = TestBed.createComponent(StatusBarComponent);
+    fixture.componentRef.setInput('identity', identity);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  describe('file variant', () => {
+    it('renders the file stat with the save icon and filename', () => {
+      const fixture = createWithIdentity({ kind: 'file', filename: 'data.json' });
+      const stat = fixture.nativeElement.querySelector(
+        '.stat-identity.stat-identity--file',
+      ) as HTMLElement | null;
+      expect(stat).not.toBeNull();
+      const value = stat!.querySelector('.value') as HTMLElement;
+      expect(value.textContent?.trim()).toBe('data.json');
+    });
+
+    it('omits the blob stat when identity kind is file', () => {
+      const fixture = createWithIdentity({ kind: 'file', filename: 'data.json' });
+      expect(fixture.nativeElement.querySelector('.stat-identity.stat-identity--blob')).toBeNull();
+    });
+
+    it('updates the rendered filename when identity changes', () => {
+      const fixture = createWithIdentity({ kind: 'file', filename: 'a.json' });
+      expect(
+        (
+          fixture.nativeElement.querySelector('.stat-identity--file .value') as HTMLElement
+        ).textContent?.trim(),
+      ).toBe('a.json');
+
+      fixture.componentRef.setInput('identity', { kind: 'file', filename: 'b.json' });
+      fixture.detectChanges();
+      expect(
+        (
+          fixture.nativeElement.querySelector('.stat-identity--file .value') as HTMLElement
+        ).textContent?.trim(),
+      ).toBe('b.json');
+    });
+  });
+
+  describe('blob variant', () => {
+    it('renders the blob stat with the link icon and "blob: <slug>" label', () => {
+      const fixture = createWithIdentity({ kind: 'blob', slug: 'abc123' });
+      const stat = fixture.nativeElement.querySelector(
+        '.stat-identity.stat-identity--blob',
+      ) as HTMLElement | null;
+      expect(stat).not.toBeNull();
+      const value = stat!.querySelector('.value') as HTMLElement;
+      // The "blob: " prefix disambiguates the slug from a filename
+      // sans extension; per the PR feedback fix the literal prefix +
+      // slug pairing is the user-visible identity for blob-backed
+      // documents (the only identity affordance when the URL bar is
+      // hidden in installed-PWA standalone mode).
+      expect(value.textContent?.trim()).toBe('blob: abc123');
+    });
+
+    it('omits the file stat when identity kind is blob', () => {
+      const fixture = createWithIdentity({ kind: 'blob', slug: 'abc123' });
+      expect(fixture.nativeElement.querySelector('.stat-identity.stat-identity--file')).toBeNull();
+    });
+
+    it('updates the rendered slug when identity changes', () => {
+      const fixture = createWithIdentity({ kind: 'blob', slug: 'xxx111' });
+      expect(
+        (
+          fixture.nativeElement.querySelector('.stat-identity--blob .value') as HTMLElement
+        ).textContent?.trim(),
+      ).toBe('blob: xxx111');
+
+      fixture.componentRef.setInput('identity', { kind: 'blob', slug: 'yyy222' });
+      fixture.detectChanges();
+      expect(
+        (
+          fixture.nativeElement.querySelector('.stat-identity--blob .value') as HTMLElement
+        ).textContent?.trim(),
+      ).toBe('blob: yyy222');
+    });
+  });
+
+  describe('null identity (draft)', () => {
+    it('omits both identity stats when identity is null', () => {
+      const fixture = createWithIdentity(null);
+      expect(fixture.nativeElement.querySelector('.stat-identity')).toBeNull();
+    });
+  });
+
+  describe('transitions across variants', () => {
+    it('switches from file to blob stat when the identity flips kind', () => {
+      const fixture = createWithIdentity({ kind: 'file', filename: 'data.json' });
+      expect(fixture.nativeElement.querySelector('.stat-identity--file')).not.toBeNull();
+
+      fixture.componentRef.setInput('identity', { kind: 'blob', slug: 'def456' });
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.stat-identity--file')).toBeNull();
+      const blob = fixture.nativeElement.querySelector('.stat-identity--blob');
+      expect(blob).not.toBeNull();
+      expect((blob as HTMLElement).querySelector('.value')!.textContent?.trim()).toBe(
+        'blob: def456',
+      );
+    });
+
+    it('switches from blob to null (clear) when identity becomes null', () => {
+      const fixture = createWithIdentity({ kind: 'blob', slug: 'abc' });
+      expect(fixture.nativeElement.querySelector('.stat-identity--blob')).not.toBeNull();
+
+      fixture.componentRef.setInput('identity', null);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.stat-identity')).toBeNull();
+    });
+  });
+});
