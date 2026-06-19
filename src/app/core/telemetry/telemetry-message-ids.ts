@@ -1150,8 +1150,15 @@ const TELEMETRY_MESSAGE_IDS = [
    *   `download`      -- Download button click.
    *   `format`        -- Format / pretty-print button.
    *   `minify`        -- Minify button.
+   *   `sort`          -- Sort button (overflow menu).
    *   `clear`         -- Clear button.
    *   `save`          -- Save button (or Enter on title field).
+   *   `saveAsNewFile` -- overflow menu "Save as new file..."
+   *                      (Chromium-only; file-backed sessions).
+   *   `saveAsBlob`    -- overflow menu "Save as blob..."
+   *                      (signed-in + file-backed sessions; opens
+   *                      the SaveAsBlobDialog for a fire-and-forget
+   *                      cloud copy that preserves the file binding).
    *   `copyShareLink` -- overflow menu "Copy share link".
    *   `deleteBlob`    -- overflow menu "Delete".
    *   `fileChange`    -- a file was actually selected from the
@@ -2333,6 +2340,130 @@ const TELEMETRY_MESSAGE_IDS = [
    * parity with `tree.breadcrumb.click`.
    */
   'tree.breadcrumb.copyPath',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` adoption pipeline
+   *           (`onFilesReceived` -> file-backed `DocumentBacking`
+   *           variant install), once per successful adoption of a
+   *           writable `FileSystemFileHandle` across all three entry
+   *           paths: `'osLaunch'` (OS file-association double-click
+   *           via `LaunchQueueController`), `'pick'` (toolbar Upload
+   *           on Chromium via `FileAccessService.openLocalFile`),
+   *           and `'drag'` (drag-drop via
+   *           `DataTransferItem.getAsFileSystemHandle` on Chromium).
+   *
+   * Co-fires with `upload.handle` (which signals bytes were ingested
+   * and parsed) but answers a different question: "a writable handle
+   * was attached to the document backing" vs. "a file's bytes
+   * arrived." Same handle attachment counts both events because the
+   * two questions can drift -- e.g., a file picked but with denied
+   * write permission fires `upload.handle` only.
+   *
+   * Bounded-frequency: at most one per adoption gesture. Volume is
+   * naturally bounded by user file-open clicks / drops / OS launches.
+   *
+   * Props:
+   *   { source: 'pick' | 'drag' | 'osLaunch';
+   *     sizeBytesBucket: SizeBucket }
+   *   - `source` distinguishes the three entry paths. Closed enum.
+   *   - `sizeBytesBucket` via `bucketBytes` so dashboards can group
+   *     by size band without per-file cardinality.
+   * Measurements: { sizeBytes: number }.
+   *   Raw byte count of the adopted file. Paired with the bucket
+   *   dimension so KQL can aggregate by bucket AND compute
+   *   percentiles on the raw value.
+   *
+   * Privacy: no filename, no path, no content fragments. Closed enum
+   * + bucketed measurements per AGENTS.md s4 Telemetry.
+   */
+  'file.adoptHandle',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.onSave` (kind: 'file' branch) after a
+   *           successful `FileAccessService.saveToFile` /
+   *           `saveAsNewFile`. The `kind` prop disambiguates the two:
+   *           `'overwrite'` = wrote to the existing handle;
+   *           `'saveAs'` = a new handle from `showSaveFilePicker`
+   *           replaced the prior backing.
+   *
+   * Bounded-frequency: one per user-initiated save click (gated by
+   * `saveInFlight`).
+   *
+   * Props:
+   *   { kind: 'overwrite' | 'saveAs';
+   *     sizeBytesBucket: SizeBucket }
+   * Measurements:
+   *   { sizeBytes: number; durationMs: number }
+   *   - `sizeBytes`: UTF-8 byte length of the written text.
+   *   - `durationMs`: wall-clock time from save click to writable
+   *     close. Covers the `createWritable` -> `write` -> `close`
+   *     pipeline; includes any browser-side permission prompt time
+   *     for `'saveAs'` (the picker dialog is part of the user-perceived
+   *     save latency for that kind).
+   *
+   * Privacy: no filename. Bucketed size as dimension, raw size as
+   * measurement.
+   */
+  'file.save.success',
+
+  /**
+   * Severity: warn
+   * Fired by:
+   *   - `HomeComponent.onSave` (kind: 'file' branch) and
+   *     `HomeComponent.onSaveAsNewFile` on any `FileAccessError`
+   *     thrown from `FileAccessService` -- the primary save and
+   *     save-as paths' failure surface.
+   *   - `HomeComponent.onFilesReceived` validator-rejection branch
+   *     (`'tooLarge'` / `'binary'`) when an adoption that carried
+   *     a writable handle is dropped by the upload validator
+   *     before the handle reaches the document backing.
+   *   - `ToolbarComponent.openViaPicker` when
+   *     `FileAccessService.openLocalFile` throws during a Chromium
+   *     picker open (e.g., a user-cancel maps to `null` not a
+   *     throw, but `permissionDeniedInitial` from the proactive
+   *     `requestPermission` at adoption time, or an unexpected
+   *     `writeError` from the picker itself, both throw and route
+   *     here). The toolbar's emission lets dashboards see picker-
+   *     open failures even though no save was ever attempted.
+   *
+   * Props:
+   *   { cause: 'permissionDeniedInitial' | 'permissionDeniedRevoked'
+   *          | 'aborted' | 'notFound' | 'diskFull' | 'writeError'
+   *          | 'tooLarge' | 'binary' | 'noHandle'
+   *          | 'unsupportedBrowser' }
+   *   Mirrors the `FileAccessError.kind` closed-enum
+   *   (`file-access.service.ts`). `'tooLarge'` and `'binary'` are
+   *   added for the upload-validator-rejected adoption path
+   *   (handle is dropped before any save); the rest fire from save
+   *   attempts and picker opens.
+   *
+   * Privacy: no filename. The originating `Error.cause` is logged via
+   * the LoggerService's normal error handling, not surfaced as a prop.
+   */
+  'file.save.failed',
+
+  /**
+   * Severity: info
+   * Fired by: `ToolbarComponent.triggerFilePicker`
+   *           (`shared/components/toolbar/toolbar.component.ts`) once
+   *           per `LoggerService` lifetime (deduped via a private flag
+   *           on the toolbar) when the user clicks Upload on a browser
+   *           that lacks `showOpenFilePicker` (Safari, Firefox,
+   *           Chromium-with-disabled-API) and the toolbar fell back to
+   *           the legacy `<input type="file">` path. Useful for
+   *           sizing a future download-on-save fallback for
+   *           non-Chromium browsers.
+   *
+   * Volume control: one-shot per LoggerService lifetime. The browser
+   * doesn't change support mid-session, so subsequent clicks would
+   * report the same constant.
+   *
+   * Props: none.
+   * Measurements: none.
+   */
+  'file.openPicker.unsupported',
 
   // Beacons (icon-bearing rules surfaced via toolbar pills + ancestor badges)
 
