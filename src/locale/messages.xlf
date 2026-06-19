@@ -114,35 +114,47 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2008</context>
+          <context context-type="linenumber">2179</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2915</context>
+          <context context-type="linenumber">3089</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3046</context>
+          <context context-type="linenumber">3212</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3056</context>
+          <context context-type="linenumber">3217</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3064</context>
+          <context context-type="linenumber">3384</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3074</context>
+          <context context-type="linenumber">3403</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3456</context>
+          <context context-type="linenumber">3414</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3466</context>
+          <context context-type="linenumber">3424</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3796</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">4022</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">4032</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/rule-sets-toolbar.component.ts</context>
@@ -329,7 +341,7 @@
         <source><x id="eventVerb" equiv-text="verb"/> -- <x id="product" equiv-text="anchorB.value"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/title-suggester/strategies/event-envelope.ts</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">80</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/title-suggester/strategies/microsoft-commerce-billing-event.ts</context>
@@ -424,14 +436,14 @@
         <source>JWT: <x id="issuer" equiv-text="iss"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/title-suggester/strategies/jwt-payload.ts</context>
-          <context context-type="linenumber">39</context>
+          <context context-type="linenumber">70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.titleSuggestion.jwt.generic" datatype="html">
         <source>JWT payload</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/title-suggester/strategies/jwt-payload.ts</context>
-          <context context-type="linenumber">40</context>
+          <context context-type="linenumber">71</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.titleSuggestion.shape.objectWithNKeys" datatype="html">
@@ -508,14 +520,14 @@
         <source>Drop on the editor page to load a file</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/upload/document-drop-controller.service.ts</context>
-          <context context-type="linenumber">166</context>
+          <context context-type="linenumber">241</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.dropElsewhere.action" datatype="html">
         <source>Go to editor</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/upload/document-drop-controller.service.ts</context>
-          <context context-type="linenumber">167</context>
+          <context context-type="linenumber">242</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.title" datatype="html">
@@ -677,7 +689,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3436</context>
+          <context context-type="linenumber">4002</context>
         </context-group>
       </trans-unit>
       <trans-unit id="common.cancel" datatype="html">
@@ -696,11 +708,15 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3437</context>
+          <context context-type="linenumber">4003</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/clone-preset-dialog.component.ts</context>
           <context context-type="linenumber">80,82</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">152,154</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.success" datatype="html">
@@ -711,7 +727,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3455</context>
+          <context context-type="linenumber">4021</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.failed" datatype="html">
@@ -722,7 +738,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3465</context>
+          <context context-type="linenumber">4031</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.title" datatype="html">
@@ -2143,316 +2159,415 @@
         <source>JSON editor</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">43,45</context>
+          <context context-type="linenumber">48,50</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.editorPane.aria" datatype="html">
         <source>JSON input</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">55,56</context>
+          <context context-type="linenumber">60,61</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.treePane.aria" datatype="html">
         <source>Tree view</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">100,101</context>
+          <context context-type="linenumber">105,106</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.server.brand" datatype="html">
         <source>JotJSON</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">122,123</context>
+          <context context-type="linenumber">127,128</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.server.tagline" datatype="html">
         <source>JSON viewer, formatter, and tree explorer</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">123,124</context>
+          <context context-type="linenumber">128,129</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.server.description" datatype="html">
         <source> Paste, format, validate, and share JSON or JSONC. Browse large documents in a fast tree explorer with formatting rules, history, and shareable links. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">125,127</context>
+          <context context-type="linenumber">130,132</context>
         </context-group>
       </trans-unit>
       <trans-unit id="app.title.homepage" datatype="html">
         <source>JotJSON - JSON viewer, formatter, and tree explorer</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">923</context>
+          <context context-type="linenumber">1059</context>
         </context-group>
       </trans-unit>
       <trans-unit id="app.title.untitled" datatype="html">
         <source>Untitled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1113</context>
+          <context context-type="linenumber">1265</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3237</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.coldBootClipboard.snackbar.pasted" datatype="html">
         <source>Pasted from clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1479</context>
+          <context context-type="linenumber">1631</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.coldBootClipboard.snackbar.undo" datatype="html">
         <source>Undo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1480</context>
+          <context context-type="linenumber">1632</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.toast" datatype="html">
         <source>Reloaded - this blob was changed in another tab</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2007</context>
+          <context context-type="linenumber">2178</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.title" datatype="html">
         <source>Blob changed in another tab</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2078</context>
+          <context context-type="linenumber">2252</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.message" datatype="html">
         <source>Your local changes conflict with the latest version. Discard your changes or replace the remote version on your next save?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2079</context>
+          <context context-type="linenumber">2253</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.replaceRemote" datatype="html">
         <source>Replace remote</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2080</context>
+          <context context-type="linenumber">2254</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.discardMine" datatype="html">
         <source>Discard my changes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2081</context>
+          <context context-type="linenumber">2255</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.extract.snackbar.applied" datatype="html">
         <source>Extracted embedded JSON into the document.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2415</context>
+          <context context-type="linenumber">2589</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2856</context>
+          <context context-type="linenumber">3030</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.extract.snackbar.undo" datatype="html">
         <source>Undo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2416</context>
+          <context context-type="linenumber">2590</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2857</context>
+          <context context-type="linenumber">3031</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.sortKeys.snackbar.applied" datatype="html">
         <source>Sorted this object&apos;s keys.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2486</context>
+          <context context-type="linenumber">2660</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.sortKeys.snackbar.undo" datatype="html">
         <source>Undo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2487</context>
+          <context context-type="linenumber">2661</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.decodedApply.snackbar.applied" datatype="html">
         <source>Replaced &quot;??&quot; markers with line breaks in the document.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2572</context>
+          <context context-type="linenumber">2746</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.decodedApply.snackbar.undo" datatype="html">
         <source>Undo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2573</context>
+          <context context-type="linenumber">2747</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.osLaunch.error.unreadable" datatype="html">
         <source>Could not open the file.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">2914</context>
+          <context context-type="linenumber">3088</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="home.osLaunch.snackbar.opened" datatype="html">
-        <source>Opened <x id="filename" equiv-text="this.formatFilenameForSnack(filename)"/>.</source>
+      <trans-unit id="home.saveAsBlob.success" datatype="html">
+        <source>Cloud copy created.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3003</context>
+          <context context-type="linenumber">3189</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="home.upload.snackbar.uploaded" datatype="html">
-        <source>Uploaded <x id="filename" equiv-text="this.formatFilenameForSnack(filename)"/>.</source>
+      <trans-unit id="home.saveAsBlob.openAction" datatype="html">
+        <source>Open</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3004</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="home.upload.snackbar.undo" datatype="html">
-        <source>Undo</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3005</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="home.upload.error.tooMany" datatype="html">
-        <source>Please drop one file at a time.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3045</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="home.upload.error.tooLarge" datatype="html">
-        <source>File too large - max 5 MB</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3055</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="home.upload.error.binary" datatype="html">
-        <source>File does not appear to be a text file - upload was ignored.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3063</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="home.upload.error.readFailed" datatype="html">
-        <source>Could not read file</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3073</context>
+          <context context-type="linenumber">3190</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.quotaExceeded" datatype="html">
         <source>Blob limit reached - delete one from your saved blobs to save a new blob.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3245</context>
+          <context context-type="linenumber">3211</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3618</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.osLaunch.snackbar.opened" datatype="html">
+        <source>Opened <x id="filename" equiv-text="this.formatFilenameForSnack(filename)"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3313</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.upload.snackbar.uploaded" datatype="html">
+        <source>Uploaded <x id="filename" equiv-text="this.formatFilenameForSnack(filename)"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3314</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.upload.snackbar.undo" datatype="html">
+        <source>Undo</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3315</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.upload.error.tooMany" datatype="html">
+        <source>Please drop one file at a time.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3383</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.upload.error.tooLarge" datatype="html">
+        <source>File too large - max 5 MB</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3402</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.upload.error.binary" datatype="html">
+        <source>File does not appear to be a text file - upload was ignored.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3413</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.upload.error.readFailed" datatype="html">
+        <source>Could not read file</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3423</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.action.saveAs" datatype="html">
+        <source>Save as new file...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3779</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.permissionDeniedInitial" datatype="html">
+        <source>Permission to write the file was denied.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3802</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.permissionDeniedRevoked" datatype="html">
+        <source>Permission to write the file was revoked.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3804</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.notFound" datatype="html">
+        <source>The file is no longer available on disk.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3806</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.diskFull" datatype="html">
+        <source>Not enough disk space to save the file.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3808</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.aborted" datatype="html">
+        <source>Save was interrupted - please try again.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3810</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.tooLarge" datatype="html">
+        <source>File too large - max 5 MB</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3812</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.binary" datatype="html">
+        <source>Binary content cannot be saved as text.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3814</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.noHandle" datatype="html">
+        <source>No file is currently bound to this document.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3816</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.unsupportedBrowser" datatype="html">
+        <source>Saving local files is not supported in this browser.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3818</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.fileSave.error.writeError" datatype="html">
+        <source>Could not save the file - please try again.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">3820</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.signIn" datatype="html">
         <source>Please sign in to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3263</context>
+          <context context-type="linenumber">3829</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.forbidden" datatype="html">
         <source>You do not own this blob</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3266</context>
+          <context context-type="linenumber">3832</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.generic" datatype="html">
         <source>Could not save - please try again</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3268</context>
+          <context context-type="linenumber">3834</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.format.snackbar.applied" datatype="html">
         <source>Formatted document.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3292</context>
+          <context context-type="linenumber">3858</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.format.snackbar.undo" datatype="html">
         <source>Undo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3293</context>
+          <context context-type="linenumber">3859</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.minify.snackbar.applied" datatype="html">
         <source>Minified document.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3327</context>
+          <context context-type="linenumber">3893</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.minify.snackbar.undo" datatype="html">
         <source>Undo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3328</context>
+          <context context-type="linenumber">3894</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.sort.snackbar.applied" datatype="html">
         <source>Sorted keys.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3365</context>
+          <context context-type="linenumber">3931</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.sort.snackbar.undo" datatype="html">
         <source>Undo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3366</context>
+          <context context-type="linenumber">3932</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.success" datatype="html">
         <source>Share link copied to clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3420</context>
+          <context context-type="linenumber">3986</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.failed" datatype="html">
         <source>Failed to copy share link.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3421</context>
+          <context context-type="linenumber">3987</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.unsupported" datatype="html">
         <source>Copy is not supported in this browser.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3422</context>
+          <context context-type="linenumber">3988</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.title" datatype="html">
         <source>Delete this blob?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3434</context>
+          <context context-type="linenumber">4000</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.message" datatype="html">
         <source>&quot;<x id="name" equiv-text="label"/>&quot; will be permanently deleted. This cannot be undone.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">3435</context>
+          <context context-type="linenumber">4001</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.clone.title" datatype="html">
@@ -2539,221 +2654,320 @@
           <context context-type="linenumber">118</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="saveAsBlobDialog.title" datatype="html">
+        <source>Save as cloud blob</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">94,96</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="saveAsBlobDialog.lead" datatype="html">
+        <source> Create a separate cloud copy of the current document. The local file stays bound to your editor and continues to receive Save writes. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">97,100</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="saveAsBlobDialog.titleLabel" datatype="html">
+        <source> Title </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">106,108</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="saveAsBlobDialog.placeholder" datatype="html">
+        <source>Untitled</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">117,119</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="saveAsBlobDialog.titleAria" datatype="html">
+        <source>Cloud blob title</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">119,120</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.action.aria" datatype="html">
+        <source>Suggest a title</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">129,130</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
+          <context context-type="linenumber">303</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.action.tooltip" datatype="html">
+        <source>Suggest a title</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">131,132</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
+          <context context-type="linenumber">304</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="saveAsBlobDialog.fireAndForget" datatype="html">
+        <source> Subsequent Save still writes the local file. To update the cloud copy, use Save as blob... again to create a new copy. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">147,150</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="saveAsBlobDialog.save" datatype="html">
+        <source> Save </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/save-as-blob-dialog/save-as-blob-dialog.component.ts</context>
+          <context context-type="linenumber">161,163</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.filename.aria" datatype="html">
+        <source>Bound local file name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">6,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.filename.title" datatype="html">
+        <source>Editing local file</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">8,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.blobSlug.aria" datatype="html">
+        <source>Loaded blob identifier</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.blobSlug.title" datatype="html">
+        <source>Editing saved blob</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">19,20</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="status.chars.aria" datatype="html">
         <source>Meaningful characters (whitespace and comments excluded)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">5,6</context>
+          <context context-type="linenumber">28,29</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.chars.title" datatype="html">
         <source>Meaningful characters (no whitespace or comments)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">7,8</context>
+          <context context-type="linenumber">30,31</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.chars.label" datatype="html">
         <source>Chars</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">10,11</context>
+          <context context-type="linenumber">33,34</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.lines.aria" datatype="html">
         <source>Lines</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">13</context>
+          <context context-type="linenumber">36</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.lines.label" datatype="html">
         <source>Lines</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">14,15</context>
+          <context context-type="linenumber">37,38</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.bytes.aria" datatype="html">
         <source>Size in UTF-8 bytes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">19,20</context>
+          <context context-type="linenumber">42,43</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.bytes.title" datatype="html">
         <source>Bytes if the document was downloaded as-is (UTF-8)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">21,22</context>
+          <context context-type="linenumber">44,45</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.bytes.label" datatype="html">
         <source>Size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">24,25</context>
+          <context context-type="linenumber">47,48</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.cursor.aria" datatype="html">
         <source>Cursor position</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">29,30</context>
+          <context context-type="linenumber">52,53</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.cursor.label" datatype="html">
         <source>Ln</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">32,33</context>
+          <context context-type="linenumber">55,56</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.col.label" datatype="html">
         <source>Col</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">34,35</context>
+          <context context-type="linenumber">57,58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.nodes.aria" datatype="html">
         <source>Total nodes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">42,43</context>
+          <context context-type="linenumber">65,66</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.nodes.title" datatype="html">
         <source>Total values in the tree, including objects, arrays, and primitives.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">44,45</context>
+          <context context-type="linenumber">67,68</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.nodes.label" datatype="html">
         <source>Total Nodes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">47,48</context>
+          <context context-type="linenumber">70,71</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.depth.aria" datatype="html">
         <source>Maximum depth</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">52,53</context>
+          <context context-type="linenumber">75,76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.depth.title" datatype="html">
         <source>Maximum nesting depth. The root counts as depth 0; a direct child is depth 1.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">54,55</context>
+          <context context-type="linenumber">77,78</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.depth.label" datatype="html">
         <source>Max Depth</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">57,58</context>
+          <context context-type="linenumber">80,81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.objects.aria" datatype="html">
         <source>Object count</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">62,63</context>
+          <context context-type="linenumber">85,86</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.objects.title" datatype="html">
         <source>Number of object nodes in the tree.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">64,65</context>
+          <context context-type="linenumber">87,88</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.objects.label" datatype="html">
         <source>Objects</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">67,68</context>
+          <context context-type="linenumber">90,91</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.arrays.aria" datatype="html">
         <source>Array count</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">72,73</context>
+          <context context-type="linenumber">95,96</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.arrays.title" datatype="html">
         <source>Number of array nodes in the tree.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">74,75</context>
+          <context context-type="linenumber">97,98</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.arrays.label" datatype="html">
         <source>Arrays</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">77,78</context>
+          <context context-type="linenumber">100,101</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.comments.aria" datatype="html">
         <source>Comment count</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">83,84</context>
+          <context context-type="linenumber">106,107</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.comments.title" datatype="html">
         <source>Number of JSONC comments preserved during parsing.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">85,86</context>
+          <context context-type="linenumber">108,109</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.comments.label" datatype="html">
         <source>Comments</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">88,89</context>
+          <context context-type="linenumber">111,112</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.copy.aria" datatype="html">
         <source>Copy commit SHA</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">110,111</context>
+          <context context-type="linenumber">133,134</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.link.aria" datatype="html">
         <source>Open commit <x id="shortSha" equiv-text="this.shortSha"/> on GitHub</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.ts</context>
-          <context context-type="linenumber">99,101</context>
+          <context context-type="linenumber">148,150</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.copy.success" datatype="html">
         <source>Copied commit SHA</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.ts</context>
-          <context context-type="linenumber">105</context>
+          <context context-type="linenumber">154</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.copy.failed" datatype="html">
         <source>Failed to copy commit SHA</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.ts</context>
-          <context context-type="linenumber">106</context>
+          <context context-type="linenumber">155</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.copy.unsupported" datatype="html">
         <source>Clipboard unavailable</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.ts</context>
-          <context context-type="linenumber">107</context>
+          <context context-type="linenumber">156</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.invalid" datatype="html">
@@ -4832,7 +5046,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">426</context>
+          <context context-type="linenumber">545</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.signInToSaveCompact" datatype="html">
@@ -4843,7 +5057,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">425</context>
+          <context context-type="linenumber">544</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.overflow.tooltip" datatype="html">
@@ -4860,207 +5074,214 @@
           <context context-type="linenumber">195,196</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="toolbar.overflow.saveAsNewFile" datatype="html">
+        <source>Save as new file...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">204,206</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.overflow.saveAsBlob" datatype="html">
+        <source>Save as blob...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">209,211</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="toolbar.overflow.copyShareLink" datatype="html">
         <source>Copy share link</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
-          <context context-type="linenumber">203,205</context>
+          <context context-type="linenumber">215,217</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.overflow.delete" datatype="html">
         <source>Delete this blob</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
-          <context context-type="linenumber">207,209</context>
+          <context context-type="linenumber">219,221</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.theme.tooltip.toDark" datatype="html">
         <source>Switch to dark theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">192</context>
+          <context context-type="linenumber">236</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.theme.tooltip.toSystem" datatype="html">
         <source>Match system theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">195</context>
+          <context context-type="linenumber">239</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.theme.tooltip.toLight" datatype="html">
         <source>Switch to light theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">197</context>
+          <context context-type="linenumber">241</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.syncSelection.tooltip.on" datatype="html">
         <source>Disable tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">213</context>
+          <context context-type="linenumber">257</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.syncSelection.tooltip.off" datatype="html">
         <source>Enable tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">214</context>
+          <context context-type="linenumber">258</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.syncSelection.aria" datatype="html">
         <source>Toggle tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">216</context>
+          <context context-type="linenumber">260</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.aria" datatype="html">
         <source>Pane layout</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">225</context>
+          <context context-type="linenumber">269</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.editorOnly" datatype="html">
         <source>Show editor only</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">226</context>
+          <context context-type="linenumber">270</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.bothHorizontal" datatype="html">
         <source>Editor and tree side-by-side</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">227</context>
+          <context context-type="linenumber">271</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.bothVertical" datatype="html">
         <source>Editor above tree</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">228</context>
+          <context context-type="linenumber">272</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.treeOnly" datatype="html">
         <source>Show tree only</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">229</context>
+          <context context-type="linenumber">273</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.asCopy" datatype="html">
         <source>Save as copy</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">246</context>
+          <context context-type="linenumber">297</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.label" datatype="html">
         <source>Save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">247</context>
+          <context context-type="linenumber">298</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.title.untitled" datatype="html">
         <source>Untitled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">250</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="toolbar.titleSuggestion.action.aria" datatype="html">
-        <source>Suggest a title</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">252</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="toolbar.titleSuggestion.action.tooltip" datatype="html">
-        <source>Suggest a title</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">253</context>
+          <context context-type="linenumber">301</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.disabledTooltip" datatype="html">
         <source>No changes to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">265</context>
+          <context context-type="linenumber">339</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.save.fileTooltip" datatype="html">
+        <source>Save changes to <x id="filename" equiv-text="this.filename()"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
+          <context context-type="linenumber">342</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.asCopyTooltip" datatype="html">
         <source>Save your changes as a new blob</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">268</context>
+          <context context-type="linenumber">345</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.ready" datatype="html">
         <source>Paste: <x id="PREVIEW" equiv-text="preview"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">283</context>
+          <context context-type="linenumber">360</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.readyNoPreview" datatype="html">
         <source>Paste from clipboard</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">284</context>
+          <context context-type="linenumber">361</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.empty" datatype="html">
         <source>Clipboard does not contain JSON</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">287</context>
+          <context context-type="linenumber">364</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.denied" datatype="html">
         <source>Clipboard access blocked - enable it in your browser settings. Ctrl+V still works.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">289</context>
+          <context context-type="linenumber">366</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip" datatype="html">
         <source>Paste from clipboard</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">291</context>
+          <context context-type="linenumber">368</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.draft" datatype="html">
         <source>Draft</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">416</context>
+          <context context-type="linenumber">535</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.saved" datatype="html">
         <source>Saved</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">418</context>
+          <context context-type="linenumber">537</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.modified" datatype="html">
         <source>Modified</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">420</context>
+          <context context-type="linenumber">539</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.saving" datatype="html">
         <source>Saving...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">422</context>
+          <context context-type="linenumber">541</context>
         </context-group>
       </trans-unit>
     </body>
