@@ -10,6 +10,8 @@
       [isOwnedBlob]="isOwnedBlob()"
       [saveInFlight]="saveInFlight()"
       [isOwner]="isOwnedBlob()"
+      [isFileBacked]="isFileBacked()"
+      [filename]="fileBackedFilename()"
       [clipboardState]="clipboardState()"
       [clipboardPreview]="clipboardPreview()"
       [paneLayout]="paneLayout()"
@@ -21,6 +23,9 @@
       (copyRequested)="onCopy()"
       (copyEscaped)="onCopyEscaped()"
       (upload)="onUpload($event)"
+      (localFilePicked)="onLocalFilePicked($event)"
+      (saveAsNewFile)="onSaveAsNewFile()"
+      (saveAsBlob)="onSaveAsBlob()"
       (download)="onDownload()"
       (clear)="onClear()"
       (format)="onFormat()"
@@ -135,6 +140,7 @@
         [mode]="mode()"
         [parseResult]="parseResult()"
         [cursor]="cursor()"
+        [identity]="statusBarIdentity()"
       ></jj-status-bar>
     }
   </main>
