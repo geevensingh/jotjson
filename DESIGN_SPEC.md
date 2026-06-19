@@ -1508,13 +1508,131 @@ cannot confuse them for prod:
          that a fresh JotJSON window opens with the file content
          loaded in the editor and the "Opened data.json." snackbar
          visible.
-    - **Forward-compatibility hook**: the controller exposes a
-      `currentFileHandle: Signal<FileSystemFileHandle | null>`
-      that is set on every launch. v1 does not consume it; it
-      is reserved for a future write-back path (via
-      `FileSystemFileHandle.createWritable()`) that would
-      let the user save edits directly back to the launched
-      file without re-prompting via picker.
+  - **Write-back (1.4.0)**: the M-PWA-write-back flow extends the
+    read side above so the editor can save changes back to the
+    bound local file. The `FileSystemFileHandle` delivered by
+    `launchQueue` (or by `showOpenFilePicker` / drag-drop on
+    Chromium) is held on a `DocumentBacking` discriminated union
+    variant in `HomeComponent`; clicking Save calls
+    `FileSystemFileHandle.createWritable()` -> `write` -> `close`
+    via the stateless `FileAccessService` at
+    `core/upload/file-access.service.ts`.
+    - **Three entry paths feed one pipeline**: launchQueue
+      (OS-launched files; `LaunchEvent.entries[i].handle`),
+      `showOpenFilePicker` (Chromium-only toolbar Upload upgrade,
+      proactive `requestPermission({mode:'readwrite'})` at adoption
+      so first Save is silent), and drag-drop's
+      `DataTransferItem.getAsFileSystemHandle()` (Chromium-only;
+      `DocumentDropController.DropHandler` is now async with a
+      per-item `handle: FileSystemFileHandle | null` companion
+      array). All three feed
+      `HomeComponent.onFilesReceived(files, source, handles)`;
+      when `handles[0]` is non-null the document binds to the
+      `kind: 'file'` `DocumentBacking` variant. The Safari /
+      Firefox fallback is the legacy `<input type="file">` click,
+      which yields a `File` without a handle (file-backed Save
+      not available).
+    - **Permission UX**: split between proactive-at-adoption
+      (picker + drag-drop, where the user gesture is still fresh
+      when we call `handle.requestPermission({mode:'readwrite'})`,
+      so first Save is silent) and deferred-at-save (launchQueue
+      adoptions, where the OS click gesture is consumed by the
+      browser before our consumer fires; the Save click itself
+      is the gesture that surfaces the Chromium first-time
+      prompt). Mid-session revocation is caught at save time and
+      maps to `'permissionDeniedRevoked'` regardless of adoption
+      path. Permission-denied snackbars (initial and revoked)
+      include a "Save as new file..." action button so the user
+      is never stuck in a cul-de-sac.
+    - **Save-as-new-file**: the toolbar overflow exposes
+      `Save as new file...` (file-backed only) which calls
+      `FileAccessService.saveAsNewFile(text, suggestedName)` ->
+      `showSaveFilePicker` -> `saveToFile`. On success, the
+      `DocumentBacking` flips to the new handle (the document
+      binds to the new file going forward); user-cancel is a
+      no-op. The suggested name derives from the current
+      `lastFilename`, then the title-sans-invalid-chars +
+      `.json`, then `untitled.json`.
+    - **Save-as-blob** (file-backed + signed-in only):
+      `Save as blob...` opens the `SaveAsBlobDialogComponent`
+      (`features/home/save-as-blob-dialog/`). Title input seeded
+      from the filename sans extension; title-suggester wand
+      integrated so the user gets candidate suggestions despite
+      the toolbar title input being hidden for file-backed docs.
+      Fire-and-forget semantics: the cloud copy is created, but
+      the file binding survives -- subsequent Save still writes
+      the local file; subsequent Save-as-blob creates another new
+      cloud copy. Dialog copy states this trade-off explicitly so
+      the user opts in with full awareness.
+    - **Dirty semantics**: for `kind: 'file'`, `dirty` is
+      content-only (`content() !== savedSnapshot.content`).
+      Highlights and title edits do NOT flip the pill or
+      trigger redundant file writes because the on-disk JSON
+      has no representation for them. Highlights for file-backed
+      docs are an in-session preference; they are lost on tab
+      close (P1: no IndexedDB persistence). For `kind: 'blob'`
+      the existing 3-field dirty (content + title + highlights)
+      is unchanged.
+    - **Undo restores the backing**: `pendingReplaceUndo` carries
+      `priorBacking: DocumentBacking` captured automatically by
+      `installPendingReplace`. Paste / clear / upload Undo (both
+      snackbar and Ctrl+Z paths) restore the prior backing, so
+      an accidental paste over a file-backed document doesn't
+      silently downgrade the document to draft when undone.
+    - **Tab title + status bar surface the filename**: when
+      `kind: 'file'`, `document.title` becomes
+      `[* ]<filename> - JotJSON` (the `* ` prefix mirrors the
+      existing blob convention for dirty state), and the status
+      bar renders a left-side `data.json` stat with a save-icon
+      glyph. Multi-window installed-PWA users can distinguish
+      their tabs both at the OS level (taskbar / Dock) and
+      inside the editor.
+    - **Validator gates apply uniformly**: launchQueue / picker /
+      drag-drop adoption all run through
+      `validateAndReadSingleFile` (5 MB cap + binary detection +
+      NUL-byte scan). A rejected adoption drops the handle and
+      fires `file.save.failed` with the corresponding closed-enum
+      cause (`'tooLarge'` or `'binary'`) so dashboards can
+      distinguish "writable adoption attempted, content rejected"
+      from save-time failures.
+    - **Telemetry**: four new IDs in
+      `core/telemetry/telemetry-message-ids.ts`:
+      - `file.adoptHandle` (event): bounded-frequency per adoption.
+        Props: `source: 'pick' | 'drag' | 'osLaunch'`,
+        `sizeBytesBucket`. Measurements: `sizeBytes`.
+      - `file.save.success` (event): bounded-frequency per save.
+        Props: `kind: 'overwrite' | 'saveAs'`, `sizeBytesBucket`.
+        Measurements: `sizeBytes`, `durationMs`.
+      - `file.save.failed` (warn trace): closed-enum
+        `cause: 'permissionDeniedInitial' |
+        'permissionDeniedRevoked' | 'aborted' | 'notFound' |
+        'diskFull' | 'writeError' | 'tooLarge' | 'binary' |
+        'noHandle' | 'unsupportedBrowser'`.
+      - `file.openPicker.unsupported` (info trace, one-shot per
+        LoggerService lifetime): fires when Upload reaches the
+        legacy `<input type="file">` fallback on Safari / Firefox /
+        non-installed-Chromium. Sizes a future Safari/Firefox
+        download-on-save fallback.
+      All four are bucket-as-dimension + raw-as-measurement per the
+      AGENTS.md s4 Telemetry convention. No filenames, paths,
+      content fragments, or OIDs are ever surfaced as props or
+      measurements.
+    - **`LaunchEvent` event shape**: per-entry tuples (vs the
+      pre-write-back parallel-arrays shape) so each `entry` carries
+      a `{ file, handle }` pair. The launch-queue controller's
+      former public `currentFileHandle()` signal was removed
+      because the handle now flows on the event payload (single
+      source of truth). The `LaunchEvent.targetURL` is echoed
+      from `LaunchParams.targetURL` for forward-compat with
+      non-`navigate-new` `client_mode` values that could deep-link
+      to a non-`/` route.
+    - **Cross-platform telemetry gap acknowledged**: Chromium does
+      not expose the file-handler install-permission state to JS,
+      so we cannot directly measure "user installed PWA but denied
+      file-handler registration." The only proxy signal is
+      `file.launch` event volume vs PWA install volume. Documented
+      here so a future reviewer doesn't try to add an unobservable
+      metric.
 - **Planned polish (post-v1):**
   - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed. Today users get Chrome's omnibox install icon, which requires the minimal SW above - this is the **sole functional purpose** of `src/sw.worker.ts`. If Chromium ever decouples installability from the SW requirement, the SW becomes a candidate for deletion.
   - **Manifest screenshots**: add at least one wide and one narrow `screenshots` entry to the manifest for richer install prompts (not yet present in `manifest.webmanifest`).
@@ -2211,6 +2329,16 @@ Three change shapes:
 - **Removal**. Treat as a rename to nothing: ship a read-side strip
   that drops the field, optionally a one-shot script, then remove
   the strip once Cosmos is clean.
+
+**Forward-compat note (M-PWA-write-back, 1.4.0+)**: a future
+optional `originFilename: string | null` field on `JsonBlob` would
+be a textbook Additive change (default to `null` on the read path,
+no migration needed). Example use case: surface "this blob
+originated from `data.json`" in the History panel for cloud copies
+made via the file-backed Save-as-blob flow. Reachable later without
+breaking the wire shape; deliberately out of scope for the
+write-back PR because there is no closed-loop use case for the
+field yet (the History panel would also need a UI change).
 
 Out of scope (for v1):
 
@@ -3398,6 +3526,42 @@ Out of scope (for v1):
   rule §Security: API fields with access-control semantics must be
   enforced at the access-control layer at the time of the field's
   introduction. Resolves `followup-share-og`.
+- **1.4.0**: Local file editing - write-back. Closes the
+  M-PWA-write-back loop on top of PR #389's launchQueue / file_handlers
+  read side: clicking Save now writes the editor contents back to
+  the bound local `FileSystemFileHandle` via
+  `FileSystemFileHandle.createWritable()` -> `write` -> `close`.
+  Three Chromium entry paths produce a writable backing - launchQueue
+  (OS double-click), `showOpenFilePicker()` + handle-level
+  `requestPermission({mode:'readwrite'})` (toolbar Upload upgrade,
+  via `FileAccessService.openLocalFile()`), and
+  `DataTransferItem.getAsFileSystemHandle()`
+  (drag-drop async upgrade) - all feeding one unified
+  `onFilesReceived(files, source, handles)` pipeline that binds the
+  document to a new `DocumentBacking` discriminated union variant.
+  Permission UX is proactive-at-adoption for picker / drag-drop and
+  deferred-at-save for osLaunch; permission-denied snackbars include
+  a "Save as new file..." action so the user is never stuck in a
+  cul-de-sac. Toolbar `Save as new file...` (always) and
+  `Save as blob...` (signed-in only; fire-and-forget cloud snapshot
+  that preserves the file binding) join the overflow menu when
+  file-backed. Tab title + status bar surface the bound filename so
+  multi-window installed-PWA users can distinguish their tabs. The
+  upstream `LaunchEvent` payload reshapes from parallel arrays to
+  per-entry `{file, handle}` tuples (preserves `targetURL` for
+  forward-compat with non-`navigate-new` client_mode values); the
+  controller's former `currentFileHandle()` signal is removed because
+  the handle now flows on the event (single source of truth). Four
+  new telemetry IDs (`file.adoptHandle`, `file.save.success`,
+  `file.save.failed`, `file.openPicker.unsupported`) bucket-as-dimension
+  per AGENTS.md s4. File-backed `dirty` is content-only by design
+  (highlight + title edits do not flip the pill nor trigger redundant
+  file writes); `pendingReplaceUndo` captures `priorBacking` so
+  paste/clear/upload Undo restores the file binding. Safari + Firefox
+  unchanged (feature-detected; `file.openPicker.unsupported` measures
+  click reach into the legacy `<input type="file">` fallback to size a
+  future download-on-save fallback). DESIGN_SPEC s "Local file editing"
+  subsection extended with a "Write-back (1.4.0)" block.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
