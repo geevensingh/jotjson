@@ -1,5 +1,28 @@
 <div class="status-bar jj-no-select" role="status" aria-live="polite">
   <div class="left">
+    @if (fileIdentity(); as file) {
+      <span
+        class="stat stat-identity stat-identity--file"
+        aria-label="Bound local file name"
+        i18n-aria-label="@@status.filename.aria"
+        title="Editing local file"
+        i18n-title="@@status.filename.title"
+      >
+        <jj-icon name="save" [size]="14"></jj-icon>
+        <span class="value">{{ file.filename }}</span>
+      </span>
+    } @else if (blobIdentity(); as blob) {
+      <span
+        class="stat stat-identity stat-identity--blob"
+        aria-label="Loaded blob identifier"
+        i18n-aria-label="@@status.blobSlug.aria"
+        title="Editing saved blob"
+        i18n-title="@@status.blobSlug.title"
+      >
+        <jj-icon name="link" [size]="14"></jj-icon>
+        <span class="value">blob: {{ blob.slug }}</span>
+      </span>
+    }
     <span
       class="stat stat-chars"
       aria-label="Meaningful characters (whitespace and comments excluded)"
