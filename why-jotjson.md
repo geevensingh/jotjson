@@ -199,6 +199,24 @@ opens in a fresh JotJSON window with the editor already loaded.
 Competing online JSON tools don't register as a file handler, so
 they're locked behind a browser-tab + manual-upload step every time.
 
+### Save changes back to the file (Chromium)
+
+OS-launched files are bound to the editor as **writable** local
+files: edit in JotJSON, click Save, and the bytes go back to the
+file on disk in place. Same for files opened via the toolbar Upload
+button or drag-dropped onto the editor on Chromium -- all three
+paths produce a writable binding. The toolbar's overflow menu adds
+`Save as new file...` (writes to a different file via the OS Save
+picker) and `Save as blob...` (creates a one-off cloud copy without
+breaking the local file binding). The status bar shows the bound
+filename; the tab title prefixes a `*` when you have unsaved
+changes. Anonymous users can save to local files without
+signing in -- the cloud account is only required for cloud copies.
+Competing online JSON tools either can't write to local files at all
+(they don't use the File System Access API) or treat every save as a
+new download into your `~/Downloads` folder, so a "fix typo and
+save" loop ends up with `data (3).json` clones piling up.
+
 ---
 
 ## Plus the basics, done well

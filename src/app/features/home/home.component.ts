@@ -67,7 +67,18 @@ import { LoggerService } from '../../core/telemetry/logger.service';
 import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
 import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
 import type { SuggestionCandidate } from '../../core/title-suggester/types';
+import {
+  DRAFT_BACKING,
+  getSavedSnapshot,
+  type DocumentBacking,
+  type LoadedSnapshot,
+} from '../../core/upload/document-backing';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
+import {
+  FileAccessError,
+  FileAccessService,
+  type FileAccessFailureCause,
+} from '../../core/upload/file-access.service';
 import { LaunchQueueController } from '../../core/upload/launch-queue-controller.service';
 import { validateAndReadSingleFile } from '../../core/upload/upload-file-validator';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
@@ -101,12 +112,17 @@ import { patchExtractedValue } from './extract-json-patcher';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
 import {
+  SaveAsBlobDialogComponent,
+  type SaveAsBlobDialogData,
+  type SaveAsBlobDialogResult,
+} from './save-as-blob-dialog/save-as-blob-dialog.component';
+import {
   patchSortKeysAtPath,
   patchSortKeysDeep,
   type SortDocumentResult,
   type SortPatchResult,
 } from './sort-json-patcher';
-import { StatusBarComponent } from './status-bar/status-bar.component';
+import { StatusBarComponent, type StatusBarIdentity } from './status-bar/status-bar.component';
 import { collectStringLeaves } from './string-leaf-collector';
 import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
 
@@ -205,11 +221,13 @@ type SignInRestoreSnapshot = {
   title: string;
 };
 
-type LoadedSnapshot = {
-  content: string;
-  title: string;
-  highlights: readonly BlobHighlight[];
-};
+/**
+ * Wider closed-enum for `file.save.failed` telemetry, covering both
+ * `FileAccessError.kind` causes (from save attempts) AND the
+ * upload-validator-rejected adoption causes (`'tooLarge'`, `'binary'`).
+ * Used by `HomeComponent.openFileSaveFailureSnackbar`.
+ */
+type FileSaveFailureCause = FileAccessFailureCause | 'tooLarge' | 'binary';
 
 const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 
@@ -265,12 +283,37 @@ type ExtractedCandidate = {
 };
 
 /**
+ * Distributive variant of `Omit`: when `T` is a union, applies `Omit`
+ * to each variant individually so the discriminator is preserved.
+ * Without this, `Omit<A | B, K>` collapses to a structural Omit that
+ * loses per-variant non-shared properties, which makes object literals
+ * narrowed by a `kind` discriminator fail excess-property checks.
+ *
+ * Used by `installPendingReplace` to accept a per-variant object that
+ * the helper then merges with the auto-captured `priorBacking`.
+ */
+type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
+
+/**
  * Fields shared by every `pendingReplaceUndo` kind. The `kind`
  * discriminator narrows to the appropriate extras union member when
  * accessing per-surface fields.
  */
 type PendingReplaceUndoBase = {
   priorText: string;
+  /**
+   * Snapshot of the document backing at install time. Restored by
+   * `restoreSideStateFromPending` on either snackbar Undo or Ctrl+Z so
+   * a wholesale replacement that flipped the backing (e.g., osLaunch
+   * adoption replacing a blob-loaded document) is fully reversible.
+   *
+   * Captured automatically inside `installPendingReplace` so per-kind
+   * call sites don't need to know about it. Restoring this restores
+   * the file-handle binding for file-backed documents, the blob
+   * identity + savedSnapshot for blob-loaded documents, or the
+   * draft-no-target state.
+   */
+  priorBacking: DocumentBacking;
   startMs: number;
   undoneViaSnackbar: boolean;
   /**
@@ -456,6 +499,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly logger = inject(LoggerService);
   private readonly dropController = inject(DocumentDropController);
   private readonly launchQueueController = inject(LaunchQueueController);
+  private readonly fileAccess = inject(FileAccessService);
   private readonly beaconNav = inject(BeaconNavigationService);
   private readonly loadingSplash = inject(LoadingSplashService);
   protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
@@ -620,8 +664,11 @@ export class HomeComponent implements OnInit, OnDestroy {
    * extract-banner accept, file upload). Typing and reformat use `setContent`
    * directly.
    */
-  private replaceDocument(text: string): void {
+  private replaceDocument(text: string, newBacking?: DocumentBacking): void {
     this.setContent(text);
+    if (newBacking !== undefined) {
+      this._documentBacking.set(newBacking);
+    }
     // Bypass the 150 ms tree-pane debounce: a full-document swap is
     // a discrete action and should be visible to the user in the
     // same CD tick as the editor.
@@ -686,14 +733,37 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** The currently-loaded server blob, if any. Null when editing an anonymous draft. */
-  readonly loadedBlob = signal<JsonBlob | null>(null);
+  /**
+   * Single source of truth for the editor document's persistence target.
+   * One of `'draft'` (no target), `'blob'` (a saved server blob is
+   * loaded), or `'file'` (a writable `FileSystemFileHandle` is bound).
+   * See `core/upload/document-backing.ts` for the union shape and
+   * helpers.
+   *
+   * Setters in this component must mutate this signal directly OR pass
+   * a backing argument to {@link replaceDocument}. The convenience
+   * `loadedBlob` computed below preserves the legacy reader contract
+   * for callers that only care about the blob variant; new call sites
+   * should switch on `_documentBacking().kind` for exhaustiveness.
+   */
+  private readonly _documentBacking = signal<DocumentBacking>(DRAFT_BACKING);
+
+  /**
+   * The currently-loaded server blob, if any. `null` when the document
+   * is an anonymous draft or backed by a local file. Computed alias over
+   * `_documentBacking` so the underlying union remains the single source
+   * of truth.
+   */
+  readonly loadedBlob = computed<JsonBlob | null>(() => {
+    const backing = this._documentBacking();
+    return backing.kind === 'blob' ? backing.blob : null;
+  });
+
   readonly title = signal<string>('');
   readonly highlights = signal<readonly BlobHighlight[]>([]);
   readonly saveInFlight = signal<boolean>(false);
   readonly saveError = signal<string | null>(null);
 
-  private readonly loadedSnapshot = signal<LoadedSnapshot | null>(null);
   private readonly mutatedPaths = signal<Set<string>>(new Set<string>());
 
   /**
@@ -854,9 +924,19 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly hasContent = computed(() => this.content().trim().length > 0);
 
   readonly dirty = computed(() => {
-    const snapshot = this.loadedSnapshot();
+    const backing = this._documentBacking();
+    const snapshot = getSavedSnapshot(backing);
     if (snapshot === null) {
       return this.content().length > 0 || this.title().length > 0 || this.highlights().length > 0;
+    }
+    if (backing.kind === 'file') {
+      // File-backed dirty is content-only by design: highlights and
+      // title edits do NOT flip the pill or trigger Save writes
+      // because the on-disk JSON file has no representation for them
+      // (highlights live only in-session for a file-backed doc;
+      // titles are deferred to a future blob save). See
+      // `core/upload/document-backing.ts` for the full rationale.
+      return this.content() !== snapshot.content;
     }
     return (
       this.content() !== snapshot.content ||
@@ -870,6 +950,47 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (!blob) return false;
     const user = this.auth.user();
     return !!user && user.id === blob.ownerId;
+  });
+
+  /**
+   * True when the document is bound to a local file via the
+   * M-PWA-write-back flow (`DocumentBacking` kind === 'file').
+   * Drives the toolbar's file-backed pill state, lifted Save block
+   * for anonymous users, and overflow menu items.
+   */
+  readonly isFileBacked = computed(() => this._documentBacking().kind === 'file');
+
+  /**
+   * Filename of the bound local file, or `null` when the document is
+   * not file-backed. Passed to the toolbar for the Save tooltip and
+   * to the SaveAsBlobDialog as a suggested-name seed.
+   */
+  readonly fileBackedFilename = computed<string | null>(() => {
+    const backing = this._documentBacking();
+    return backing.kind === 'file' ? backing.filename : null;
+  });
+
+  /**
+   * Discriminated identity surfaced by the status bar's left-side
+   * stat. Mirrors the `_documentBacking` union:
+   * - `kind:'file'` -> shows the filename with a save-icon.
+   * - `kind:'blob'` -> shows `blob: <slug>` with a link-icon. This
+   *   is the only identity affordance when running as an installed
+   *   PWA (the URL bar is hidden in standalone display mode), so
+   *   without it two installed-PWA windows pointing at different
+   *   blobs would be visually indistinguishable inside the editor.
+   * - `kind:'draft'` -> null (no identity stat rendered).
+   */
+  readonly statusBarIdentity = computed<StatusBarIdentity | null>(() => {
+    const backing = this._documentBacking();
+    switch (backing.kind) {
+      case 'file':
+        return { kind: 'file', filename: backing.filename };
+      case 'blob':
+        return { kind: 'blob', slug: backing.blob.slug };
+      case 'draft':
+        return null;
+    }
   });
 
   readonly canEditHighlights = computed(() => this.loadedBlob() === null || this.isOwnedBlob());
@@ -886,12 +1007,24 @@ export class HomeComponent implements OnInit, OnDestroy {
     return tree.beaconIndex();
   });
 
-  readonly canSave = computed(
-    () =>
-      this.auth.isSignedIn() &&
-      this.hasContent() &&
-      (this.loadedBlob() === null || !this.isOwnedBlob() || this.dirty()),
-  );
+  readonly canSave = computed(() => {
+    if (!this.hasContent()) return false;
+    const backing = this._documentBacking();
+    if (backing.kind === 'file') {
+      // File-backed Save needs no auth -- the write target is local
+      // disk via the held FileSystemFileHandle. Gate on dirty so the
+      // button doesn't fire a redundant write for an unchanged
+      // document. File-backed dirty is already content-only (see
+      // `dirty` computed above), so highlight or title edits do not
+      // light the button up for a noop file write.
+      return this.dirty();
+    }
+    if (!this.auth.isSignedIn()) return false;
+    if (backing.kind === 'draft') return true;
+    // backing.kind === 'blob': either fork (unowned) or in-place
+    // update (owned + dirty).
+    return !this.isOwnedBlob() || this.dirty();
+  });
 
   /**
    * Title-suggester wand-enable predicate (M7r). The wand is enabled
@@ -1095,9 +1228,25 @@ export class HomeComponent implements OnInit, OnDestroy {
     // dirty state changes. Anonymous / unsaved editing falls back to the
     // homepage title.
     effect(() => {
-      const blob = this.loadedBlob();
+      const backing = this._documentBacking();
       const title = this.title();
       const dirtyPrefix = this.dirty() ? '* ' : '';
+      if (backing.kind === 'file') {
+        // File-backed: surface the filename so multi-window PWA users
+        // can distinguish their tabs at a glance. Same `* ` prefix
+        // convention as the blob path. SEO: noindex because the
+        // content is a local file (cannot be crawled regardless;
+        // setting noindex is defensive consistency with the blob
+        // branch).
+        this.titleService.setTitle(
+          this.envLabel.withPrefix(`${dirtyPrefix}${backing.filename} - JotJSON`),
+        );
+        if (this.isBrowser) {
+          this.seo.setNoindex(true);
+        }
+        return;
+      }
+      const blob = backing.kind === 'blob' ? backing.blob : null;
       if (!blob) {
         this.titleService.setTitle(this.envLabel.withPrefix(`${dirtyPrefix}${this.homepageTitle}`));
         // Skip on server prerender so the static OG defaults from
@@ -1521,10 +1670,22 @@ export class HomeComponent implements OnInit, OnDestroy {
    * synchronously-flushed effect that re-enters the constructor's
    * content-watch effect sees the snapshot rather than a null
    * pending field.
+   *
+   * `priorBacking` is auto-captured from the current `_documentBacking()`
+   * value so per-kind call sites don't need to know about it; this
+   * preserves the existing call-site shape while letting Undo restore
+   * the file-handle / blob binding as part of the undone state. The
+   * input type omits the field for ergonomic call-site shape and the
+   * implementation merges it in.
    */
-  private installPendingReplace(newPending: NonNullable<typeof this.pendingReplaceUndo>): void {
+  private installPendingReplace(
+    newPending: DistributiveOmit<NonNullable<typeof this.pendingReplaceUndo>, 'priorBacking'>,
+  ): void {
     this.clearPendingReplaceUndo();
-    this.pendingReplaceUndo = newPending;
+    this.pendingReplaceUndo = {
+      ...newPending,
+      priorBacking: this._documentBacking(),
+    } as NonNullable<typeof this.pendingReplaceUndo>;
     this.pendingReplaceUndoTimer = setTimeout(
       () => this.clearPendingReplaceUndo(),
       REPLACE_UNDO_CAP_MS,
@@ -1715,6 +1876,13 @@ export class HomeComponent implements OnInit, OnDestroy {
    * branches mirror what each surface's install path snapshotted.
    */
   private restoreSideStateFromPending(pending: NonNullable<typeof this.pendingReplaceUndo>): void {
+    // Restore the document backing first so subsequent calls (e.g.,
+    // applying the per-kind side-state below) see the correct
+    // dirty/canSave derivations from the union. This is a no-op for
+    // kinds that didn't change the backing (most replacements happen
+    // within the same backing); it's the lifeline for file-backed
+    // adoption that paste/clear/upload Undo-restores.
+    this._documentBacking.set(pending.priorBacking);
     switch (pending.kind) {
       case 'upload':
         this.lastFilename.set(pending.priorLastFilename);
@@ -1865,28 +2033,27 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private applyLoadedBlob(blob: JsonBlob): void {
-    const snapshot = this.snapshotFromBlob(blob);
-    this.loadedBlob.set(blob);
-    this.replaceDocument(snapshot.content);
-    this.title.set(snapshot.title);
-    this.highlights.set(snapshot.highlights);
-    this.loadedSnapshot.set(snapshot);
+    const savedSnapshot = this.snapshotFromBlob(blob);
+    this.replaceDocument(savedSnapshot.content, { kind: 'blob', blob, savedSnapshot });
+    this.title.set(savedSnapshot.title);
+    this.highlights.set(savedSnapshot.highlights);
     this.mutatedPaths.set(new Set<string>());
   }
 
   private applySavedBlobResponse(blob: JsonBlob, submitted: LoadedSnapshot): void {
-    const snapshot = this.snapshotFromBlob(blob);
-    this.loadedBlob.set(blob);
-    if (this.content() === submitted.content && this.content() !== snapshot.content) {
-      this.replaceDocument(snapshot.content);
+    const savedSnapshot = this.snapshotFromBlob(blob);
+    const newBacking: DocumentBacking = { kind: 'blob', blob, savedSnapshot };
+    if (this.content() === submitted.content && this.content() !== savedSnapshot.content) {
+      this.replaceDocument(savedSnapshot.content, newBacking);
+    } else {
+      this._documentBacking.set(newBacking);
     }
     if (this.title() === submitted.title) {
-      this.title.set(snapshot.title);
+      this.title.set(savedSnapshot.title);
     }
     if (highlightsEqual(this.highlights(), submitted.highlights)) {
-      this.highlights.set(snapshot.highlights);
+      this.highlights.set(savedSnapshot.highlights);
     }
-    this.loadedSnapshot.set(snapshot);
     this.mutatedPaths.set(new Set<string>());
   }
 
@@ -1907,9 +2074,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private resetLoadedBlobState(): void {
-    this.loadedBlob.set(null);
+    this._documentBacking.set(DRAFT_BACKING);
     this.highlights.set([]);
-    this.loadedSnapshot.set(null);
     this.mutatedPaths.set(new Set<string>());
   }
 
@@ -1923,9 +2089,11 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
       return mergedPaths;
     });
-    if (this.loadedBlob() === null) {
-      this.loadedSnapshot.set(null);
-    }
+    // Note: the prior `if (this.loadedBlob() === null) this.loadedSnapshot.set(null);`
+    // dead code was removed in the M-PWA-write-back DocumentBacking
+    // refactor. With the union, `'draft'` has no `savedSnapshot` to clear
+    // and the other variants intentionally retain their snapshot when
+    // highlights reset for a non-replacing flow.
   }
 
   __loadBlobForTesting(blob: JsonBlob): void {
@@ -2009,7 +2177,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       { duration: 5000 },
     );
 
-    const baseSnapshot = this.loadedSnapshot();
+    const baseSnapshot = getSavedSnapshot(this._documentBacking());
     if (baseSnapshot === null) {
       this.applyLoadedBlob(remoteBlob);
       return;
@@ -2048,10 +2216,15 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.mutatedPaths(),
     );
 
-    this.loadedBlob.set(remoteBlob);
-    this.loadedSnapshot.set(remoteSnapshot);
+    const newBacking: DocumentBacking = {
+      kind: 'blob',
+      blob: remoteBlob,
+      savedSnapshot: remoteSnapshot,
+    };
     if (this.content() !== nextContent) {
-      this.replaceDocument(nextContent);
+      this.replaceDocument(nextContent, newBacking);
+    } else {
+      this._documentBacking.set(newBacking);
     }
     this.title.set(nextTitle);
     this.highlights.set(nextHighlights);
@@ -2903,8 +3076,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.disposeDropHandler = this.dropController.registerEditorHandler((files) => {
-      void this.onFilesReceived(files, 'drag');
+    this.disposeDropHandler = this.dropController.registerEditorHandler((files, handles) => {
+      void this.onFilesReceived(files, 'drag', handles);
     });
     this.disposeLaunchHandler = this.launchQueueController.registerHandler(async (event) => {
       if (event.kind === 'error') {
@@ -2915,7 +3088,9 @@ export class HomeComponent implements OnInit, OnDestroy {
         );
         return;
       }
-      await this.onFilesReceived(event.files, 'osLaunch');
+      const files = event.entries.map((entry) => entry.file);
+      const handles = event.entries.map((entry) => entry.handle);
+      await this.onFilesReceived(files, 'osLaunch', handles);
     });
   }
 
@@ -2928,10 +3103,147 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   async onUpload(file: File): Promise<void> {
-    await this.onFilesReceived([file], 'pick');
+    // Phase 3: toolbar Upload still goes through `<input type="file">`
+    // which yields a `File` without a writable handle. Phase 4 upgrades
+    // the toolbar Upload click to call `showOpenFilePicker()` on
+    // Chromium (via `FileAccessService.openLocalFile()`) and then
+    // upgrade the returned handle's permission to readwrite via
+    // `handle.requestPermission({ mode: 'readwrite' })`. The picker
+    // path emits the resulting `{file, handle}` tuple to
+    // `onLocalFilePicked` so the document binds to the file-backed
+    // `DocumentBacking` variant. This handler covers the
+    // Safari/Firefox fallback path (no File System Access support)
+    // and any future surface that delivers a bare `File`. Pass
+    // `[null]` for handles so the unified `onFilesReceived` path
+    // can still gate on handle availability.
+    await this.onFilesReceived([file], 'pick', [null]);
   }
 
-  private async onFilesReceived(files: readonly File[], source: FileIngressSource): Promise<void> {
+  /**
+   * Toolbar emits this when the Chromium `showOpenFilePicker` resolved
+   * with `{ file, handle }`. Routes through the same
+   * `onFilesReceived` pipeline as drag-drop / osLaunch / legacy
+   * upload, but with a non-null handle slot so the document binds to
+   * the `'file'` DocumentBacking variant.
+   */
+  async onLocalFilePicked(picked: { file: File; handle: FileSystemFileHandle }): Promise<void> {
+    await this.onFilesReceived([picked.file], 'pick', [picked.handle]);
+  }
+
+  /**
+   * Opens the {@link SaveAsBlobDialogComponent} to create a cloud copy
+   * of the current file-backed document. The local file binding is
+   * preserved (fire-and-forget semantics per skeptic v2 #6 + plan v2
+   * user decision): subsequent Save still writes the file; subsequent
+   * Save-as-blob creates another new cloud copy.
+   *
+   * Only reachable from the toolbar overflow when the document is
+   * file-backed AND the user is signed in. Defensive checks guard
+   * against accidental invocation outside that gate.
+   */
+  async onSaveAsBlob(): Promise<void> {
+    const backing = this._documentBacking();
+    if (backing.kind !== 'file') return;
+    const user = this.auth.user();
+    if (!user) return;
+    if (this.saveInFlight()) return;
+
+    const parsed = this.parseResult();
+    const data: SaveAsBlobDialogData = {
+      initialTitle: this.suggestedBlobTitleForFile(backing.filename),
+      jsonText: this.content(),
+      parsed: parsed.empty ? undefined : parsed.value,
+      hasParseErrors: parsed.errors.length > 0,
+      filename: backing.filename,
+    };
+    const dialogRef = this.dialog.open<
+      SaveAsBlobDialogComponent,
+      SaveAsBlobDialogData,
+      SaveAsBlobDialogResult | undefined
+    >(SaveAsBlobDialogComponent, {
+      data,
+      width: '480px',
+      autoFocus: 'first-tabbable',
+    });
+    const result = await firstValueFrom(dialogRef.afterClosed());
+    if (!result) return; // user cancelled
+
+    this.saveInFlight.set(true);
+    this.saveError.set(null);
+    const submittedContent = this.content();
+    const submittedHighlights = this.pruneHighlightsForSave(submittedContent, this.highlights());
+    try {
+      const created = await firstValueFrom(
+        this.blobs.create(submittedContent, result.title, [...submittedHighlights]),
+      );
+      this.logger.event('share.created', undefined, {
+        sizeBytes: new Blob([submittedContent]).size,
+      });
+      const { autoDeleted, ...blob } = created;
+      // Fire-and-forget: do NOT transition documentBacking. The
+      // local file remains the primary save target. Surface a
+      // snackbar so the user knows the cloud copy succeeded; the
+      // snackbar's action navigates to the new blob's share URL in
+      // a new tab so the user does not lose their file-backed
+      // editing context.
+      const ref = this.snack.open(
+        $localize`:@@home.saveAsBlob.success:Cloud copy created.`,
+        $localize`:@@home.saveAsBlob.openAction:Open`,
+        { duration: 8000 },
+      );
+      if (ref) {
+        ref
+          .onAction()
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe(() => {
+            // Open the share URL in a new tab so the file-backed
+            // editing session in this tab is preserved.
+            window.open(`/s/${blob.slug}`, '_blank', 'noopener');
+          });
+      }
+      if (autoDeleted) {
+        void this.quota.notifyAutoDeleted(autoDeleted);
+      }
+    } catch (error) {
+      const httpError = error as { status?: number; error?: { code?: string } };
+      if (httpError.status === 409 && httpError.error?.code === 'quota_exceeded') {
+        void this.quota.notifyQuotaExceededManual();
+        this.snack.open(
+          $localize`:@@save.error.quotaExceeded:Blob limit reached - delete one from your saved blobs to save a new blob.`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 6000 },
+        );
+      } else {
+        const message = this.formatSaveError(error);
+        this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, { duration: 6000 });
+      }
+      this.logger.warn('home.save.failed');
+    } finally {
+      this.saveInFlight.set(false);
+    }
+  }
+
+  /**
+   * Compose a sensible seed title for the SaveAsBlobDialog when the
+   * source is a file-backed document. Strips the file extension from
+   * the filename (the cloud blob's title is a freeform string, not a
+   * filename, so the `.json` suffix is noise) and trims whitespace.
+   * Falls back to the current document title or 'Untitled'.
+   */
+  private suggestedBlobTitleForFile(filename: string): string {
+    const cleaned = filename.replace(/\.(json|jsonc|json5|geojson|jsonl|webmanifest)$/i, '').trim();
+    if (cleaned.length > 0) return cleaned;
+    const fromTitle = this.title().trim();
+    if (fromTitle.length > 0) return fromTitle;
+    return $localize`:@@app.title.untitled:Untitled`;
+  }
+
+  private async onFilesReceived(
+    files: readonly File[],
+    source: FileIngressSource,
+    handles?: readonly (FileSystemFileHandle | null)[],
+  ): Promise<void> {
+    const adoptedHandle = handles?.[0] ?? null;
     const handlerStartedAt = performance.now();
     const fileReadStartedAt = performance.now();
     const result = await validateAndReadSingleFile(files);
@@ -2940,6 +3252,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       case 'ok': {
         const filename = files[0]?.name ?? 'file';
         const sizeBytes = files[0]?.size ?? new Blob([result.text]).size;
+        const lastModifiedKnown = files[0]?.lastModified ?? Date.now();
         const parseStartedAt = performance.now();
         const { unescaped } = this.parser.tryUnescape(result.text);
         const parseMs = this.durationSince(parseStartedAt);
@@ -3003,6 +3316,34 @@ export class HomeComponent implements OnInit, OnDestroy {
             $localize`:@@home.upload.snackbar.undo:Undo`,
           );
         }
+        // When the adoption path delivered a writable handle (osLaunch
+        // today; Chromium picker + drag-drop after Phase 4), bind the
+        // document to it via the `'file'` DocumentBacking variant.
+        // The handle is attached AFTER the editor content has been
+        // applied + the pending-undo snapshot has been installed, so
+        // Undo can restore the prior backing (draft or blob) without
+        // racing the editor's content-watch effect. The savedSnapshot
+        // is the just-loaded file content; file-backed dirty is
+        // content-only (see `dirty` computed) so highlights/title
+        // are ignored downstream.
+        if (adoptedHandle !== null) {
+          this._documentBacking.set({
+            kind: 'file',
+            handle: adoptedHandle,
+            filename,
+            lastModifiedKnown,
+            savedSnapshot: {
+              content: unescaped,
+              title: this.title(),
+              highlights: this.highlights(),
+            },
+          });
+          this.logger.event(
+            'file.adoptHandle',
+            { source, sizeBytesBucket: bucketBytes(sizeBytes) },
+            { sizeBytes },
+          );
+        }
         // Surface upload-source validation errors as a persistent in-pane
         // banner (issue #36, spec §294). parseResult() shares its memoized
         // parse with the editor's render path, so this is not an extra
@@ -3049,6 +3390,15 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.logger.warn('home.upload.tooLarge', {
           sizeBytes: result.sizeBytes,
         });
+        // Adoption telemetry: if the user opened a file via a handle-
+        // bearing path (osLaunch / picker / drag-drop on Chromium),
+        // the writable handle is dropped here. Fire `file.save.failed`
+        // so dashboards can see "writable adoption attempted but
+        // validator rejected the content" distinct from save-time
+        // failures. The user-facing snackbar below is unchanged.
+        if (adoptedHandle !== null) {
+          this.logger.warn('file.save.failed', { cause: 'tooLarge' });
+        }
         this.snack.open(
           $localize`:@@home.upload.error.tooLarge:File too large - max 5 MB`,
           $localize`:@@common.dismiss:Dismiss`,
@@ -3057,6 +3407,9 @@ export class HomeComponent implements OnInit, OnDestroy {
         return;
       case 'binary':
         this.logger.info('home.upload.binary', { filename: result.filename });
+        if (adoptedHandle !== null) {
+          this.logger.warn('file.save.failed', { cause: 'binary' });
+        }
         this.snack.open(
           $localize`:@@home.upload.error.binary:File does not appear to be a text file - upload was ignored.`,
           $localize`:@@common.dismiss:Dismiss`,
@@ -3182,19 +3535,44 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Save the current editor contents. If the loaded blob is owned by the
-   * current user, update in place (same slug). Otherwise, create a new blob
-   * (fork) with a fresh slug.
+   * Save the current editor contents. Branches on `documentBacking().kind`:
+   *
+   * - **`'file'`**: write to the bound `FileSystemFileHandle` via
+   *   `FileAccessService.saveToFile`. No cloud auth required. Permission
+   *   is re-checked inside the Save click gesture (deferred-at-save path
+   *   for osLaunch adoptions whose original OS click was consumed by the
+   *   browser; the picker / drag-drop paths already obtained readwrite
+   *   permission at adoption time but this guard catches mid-session
+   *   revocations too). On failure, surfaces a localized snackbar; for
+   *   `'permissionDeniedRevoked'` / `'permissionDeniedInitial'` the
+   *   snackbar includes a "Save as new file..." action so the user is
+   *   never stuck in a permission cul-de-sac.
+   * - **`'blob'` (owned)**: PUT in place at the existing slug.
+   * - **`'blob'` (unowned) / `'draft'`**: POST a new blob (fork or create).
+   *
+   * Returns early when `canSave()` is false or a save is already in
+   * flight. The `saveInFlight` flag gates both this method and
+   * `onSaveAsNewFile` so a double-click or rapid Save-then-Save-As
+   * cannot race two writables.
    */
   async onSave(): Promise<void> {
     if (!this.canSave() || this.saveInFlight()) return;
+
+    const backing = this._documentBacking();
+
+    if (backing.kind === 'file') {
+      await this.onSaveToFile(backing);
+      return;
+    }
+
+    // Blob / draft path: requires a signed-in user.
     const user = this.auth.user();
     if (!user) return;
 
     this.saveInFlight.set(true);
     this.saveError.set(null);
 
-    const existing = this.loadedBlob();
+    const existing = backing.kind === 'blob' ? backing.blob : null;
     const submitted = this.currentSnapshot();
     const trimmedTitle = submitted.title.trim();
     const titlePatch = trimmedTitle.length > 0 ? trimmedTitle : undefined;
@@ -3248,6 +3626,199 @@ export class HomeComponent implements OnInit, OnDestroy {
       void error;
     } finally {
       this.saveInFlight.set(false);
+    }
+  }
+
+  /**
+   * File-backed save branch. Extracted from {@link onSave} to keep the
+   * 3-branch switch readable and so unit tests can exercise the file
+   * path in isolation without provisioning a fake `BlobService`.
+   */
+  private async onSaveToFile(backing: Extract<DocumentBacking, { kind: 'file' }>): Promise<void> {
+    this.saveInFlight.set(true);
+    this.saveError.set(null);
+    const text = this.content();
+    const startedAt = performance.now();
+    try {
+      // Re-check (or first-prompt) write permission inside the Save
+      // gesture. For picker / drag-drop adoptions this typically
+      // short-circuits to 'granted'; for osLaunch it surfaces the
+      // Chromium first-time prompt; for any path it catches a
+      // mid-session revocation as 'denied'.
+      const permission = await this.fileAccess.requestWritePermission(backing.handle);
+      if (permission !== 'granted') {
+        this.openFileSaveFailureSnackbar('permissionDeniedInitial');
+        return;
+      }
+      const { lastModified } = await this.fileAccess.saveToFile(backing.handle, text);
+      const durationMs = performance.now() - startedAt;
+      const sizeBytes = new Blob([text]).size;
+      this.logger.event(
+        'file.save.success',
+        { kind: 'overwrite', sizeBytesBucket: bucketBytes(sizeBytes) },
+        { sizeBytes, durationMs },
+      );
+      // Refresh the saved snapshot to mark the document clean.
+      // File-backed dirty is content-only, so only `content` matters,
+      // but the shape carries title + highlights too for uniformity
+      // with the other variants.
+      this._documentBacking.set({
+        kind: 'file',
+        handle: backing.handle,
+        filename: backing.filename,
+        lastModifiedKnown: lastModified,
+        savedSnapshot: {
+          content: text,
+          title: this.title(),
+          highlights: this.highlights(),
+        },
+      });
+    } catch (cause) {
+      const kind: FileAccessFailureCause =
+        cause instanceof FileAccessError ? cause.kind : 'writeError';
+      this.openFileSaveFailureSnackbar(kind);
+    } finally {
+      this.saveInFlight.set(false);
+    }
+  }
+
+  /**
+   * Save the current document to a new local file chosen by the user.
+   * Opens `showSaveFilePicker` (Chromium only), writes the content to
+   * the chosen handle, and replaces the document backing with the new
+   * file. Gated by `saveInFlight` so this cannot race with the
+   * primary {@link onSave}.
+   *
+   * When the user cancels the picker, this is a no-op (no error, no
+   * snackbar, no telemetry). When the picker resolves but the write
+   * fails, surfaces the same failure-snackbar branch as
+   * {@link onSave} for the file-backed path.
+   */
+  async onSaveAsNewFile(): Promise<void> {
+    if (this.saveInFlight()) return;
+    if (!this.fileAccess.hasFileSystemAccess()) {
+      // Should never reach here because the toolbar overflow item is
+      // gated on `hasFileSystemAccess`. Defensive fallback only.
+      this.logger.info('file.openPicker.unsupported');
+      return;
+    }
+    this.saveInFlight.set(true);
+    this.saveError.set(null);
+    const text = this.content();
+    const startedAt = performance.now();
+    const suggestedName = this.suggestedFilenameForSaveAs();
+    try {
+      const result = await this.fileAccess.saveAsNewFile(text, suggestedName);
+      if (result === null) {
+        // User-cancelled the picker. No-op.
+        return;
+      }
+      const durationMs = performance.now() - startedAt;
+      const sizeBytes = new Blob([text]).size;
+      this.logger.event(
+        'file.save.success',
+        { kind: 'saveAs', sizeBytesBucket: bucketBytes(sizeBytes) },
+        { sizeBytes, durationMs },
+      );
+      this._documentBacking.set({
+        kind: 'file',
+        handle: result.handle,
+        filename: result.file.name,
+        lastModifiedKnown: result.lastModified,
+        savedSnapshot: {
+          content: text,
+          title: this.title(),
+          highlights: this.highlights(),
+        },
+      });
+      this.lastFilename.set(result.file.name);
+    } catch (cause) {
+      const kind: FileAccessFailureCause =
+        cause instanceof FileAccessError ? cause.kind : 'writeError';
+      this.openFileSaveFailureSnackbar(kind);
+    } finally {
+      this.saveInFlight.set(false);
+    }
+  }
+
+  /**
+   * Compose a suggested filename for `showSaveFilePicker`. Prefers
+   * the current `lastFilename` (covers Save-As of an already-named
+   * file), then a title-derived name, then a default. The picker UI
+   * appends the file extension based on the manifest's accept dict.
+   */
+  private suggestedFilenameForSaveAs(): string {
+    const fromLast = this.lastFilename();
+    if (fromLast !== null && fromLast.length > 0) return fromLast;
+    const fromTitle = this.title().trim();
+    if (fromTitle.length > 0) {
+      // Strip characters that would be invalid in a filename on
+      // Windows / macOS / Linux. Keep it conservative; the picker UI
+      // accepts a wider set but the suggested name should be safe.
+      return fromTitle.replace(/[\\/:*?"<>|]+/g, '-').slice(0, 100) + '.json';
+    }
+    return 'untitled.json';
+  }
+
+  /**
+   * Open the file-save failure snackbar with a "Save as new file..."
+   * action button for the permission-denied causes (skeptic v2 #4
+   * cul-de-sac fix). Other causes show a dismiss-only snackbar.
+   * Always fires `file.save.failed` telemetry with the closed-enum
+   * cause.
+   */
+  private openFileSaveFailureSnackbar(cause: FileSaveFailureCause): void {
+    this.logger.warn('file.save.failed', { cause });
+    const message = this.formatFileSaveFailureMessage(cause);
+    const offersSaveAs =
+      cause === 'permissionDeniedInitial' ||
+      cause === 'permissionDeniedRevoked' ||
+      cause === 'notFound';
+    if (offersSaveAs) {
+      const ref = this.snack.open(
+        message,
+        $localize`:@@home.fileSave.action.saveAs:Save as new file...`,
+        { duration: 8000, politeness: 'assertive' },
+      );
+      // Test environments may stub `MatSnackBar.open` as a vi.fn() that
+      // returns undefined; the warn-trace + `file.save.failed` event
+      // still fire and the failure is logged, but the action chain is
+      // skipped (no Undo to subscribe to). Matches the defensive shape
+      // in `openReplaceUndoSnack`.
+      if (!ref) return;
+      ref
+        .onAction()
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(() => {
+          void this.onSaveAsNewFile();
+        });
+      return;
+    }
+    this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, { duration: 6000 });
+  }
+
+  private formatFileSaveFailureMessage(cause: FileSaveFailureCause): string {
+    switch (cause) {
+      case 'permissionDeniedInitial':
+        return $localize`:@@home.fileSave.error.permissionDeniedInitial:Permission to write the file was denied.`;
+      case 'permissionDeniedRevoked':
+        return $localize`:@@home.fileSave.error.permissionDeniedRevoked:Permission to write the file was revoked.`;
+      case 'notFound':
+        return $localize`:@@home.fileSave.error.notFound:The file is no longer available on disk.`;
+      case 'diskFull':
+        return $localize`:@@home.fileSave.error.diskFull:Not enough disk space to save the file.`;
+      case 'aborted':
+        return $localize`:@@home.fileSave.error.aborted:Save was interrupted - please try again.`;
+      case 'tooLarge':
+        return $localize`:@@home.fileSave.error.tooLarge:File too large - max 5 MB`;
+      case 'binary':
+        return $localize`:@@home.fileSave.error.binary:Binary content cannot be saved as text.`;
+      case 'noHandle':
+        return $localize`:@@home.fileSave.error.noHandle:No file is currently bound to this document.`;
+      case 'unsupportedBrowser':
+        return $localize`:@@home.fileSave.error.unsupportedBrowser:Saving local files is not supported in this browser.`;
+      case 'writeError':
+        return $localize`:@@home.fileSave.error.writeError:Could not save the file - please try again.`;
     }
   }
 

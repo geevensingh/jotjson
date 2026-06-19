@@ -97,9 +97,9 @@ describe('LaunchQueueController', () => {
   it('is a silent no-op when window.launchQueue is absent', () => {
     installLaunchQueue(false);
     configureBrowserTestBed();
-    const controller = TestBed.inject(LaunchQueueController);
-    expect(controller.currentFileHandle()).toBeNull();
-    // No throw is the contract; the handler simply never fires.
+    TestBed.inject(LaunchQueueController);
+    // No throw is the contract; the consumer is never registered.
+    expect(setConsumerSpy).not.toHaveBeenCalled();
   });
 
   it('registers a single setConsumer on the browser platform', () => {
@@ -120,10 +120,9 @@ describe('LaunchQueueController', () => {
     await flush();
 
     expect(handler).not.toHaveBeenCalled();
-    expect(controller.currentFileHandle()).toBeNull();
   });
 
-  it('delivers a single file as a files-kind LaunchEvent', async () => {
+  it('delivers a single file as a files-kind LaunchEvent with handle + targetURL', async () => {
     installLaunchQueue(true);
     configureBrowserTestBed();
     const controller = TestBed.inject(LaunchQueueController);
@@ -139,10 +138,11 @@ describe('LaunchQueueController', () => {
     const event = handler.mock.lastCall![0] as LaunchEvent;
     expect(event.kind).toBe('files');
     if (event.kind === 'files') {
-      expect(event.files.length).toBe(1);
-      expect(event.files[0]).toBe(file);
+      expect(event.entries.length).toBe(1);
+      expect(event.entries[0]!.file).toBe(file);
+      expect(event.entries[0]!.handle).toBe(handle);
+      expect(event.targetURL).toBe('https://jotjson.com/');
     }
-    expect(controller.currentFileHandle()).toBe(handle);
   });
 
   it('truncates a multi-file launch to the first handle (only one getFile call)', async () => {
@@ -170,8 +170,9 @@ describe('LaunchQueueController', () => {
     const event = handler.mock.lastCall![0] as LaunchEvent;
     expect(event.kind).toBe('files');
     if (event.kind === 'files') {
-      expect(event.files.length).toBe(1);
-      expect(event.files[0]).toBe(fileA);
+      expect(event.entries.length).toBe(1);
+      expect(event.entries[0]!.file).toBe(fileA);
+      expect(event.entries[0]!.handle).toBe(handleA);
     }
   });
 
@@ -194,7 +195,6 @@ describe('LaunchQueueController', () => {
       expect(event.cause).toBe(cause);
     }
     expect(logger.error).toHaveBeenCalledWith('home.fileHandler.readFailed', cause);
-    expect(controller.currentFileHandle()).toBe(handle);
   });
 
   it('replaces an active handler on re-register and emits a console warning', async () => {
@@ -252,22 +252,37 @@ describe('LaunchQueueController', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('exposes currentFileHandle reflecting the latest launched handle', async () => {
+  it('delivers the launch handle alongside the file on each event', async () => {
     installLaunchQueue(true);
     configureBrowserTestBed();
     const controller = TestBed.inject(LaunchQueueController);
     const handler = vi.fn().mockResolvedValue(undefined);
     controller.registerHandler(handler);
-    expect(controller.currentFileHandle()).toBeNull();
 
-    const handleA = makeHandle(new File(['{}'], 'a.json'));
+    const fileA = new File(['{}'], 'a.json');
+    const handleA = makeHandle(fileA);
     await consumer!({ files: [handleA], targetURL: 'https://jotjson.com/' });
     await flush();
-    expect(controller.currentFileHandle()).toBe(handleA);
+    {
+      const event = handler.mock.lastCall![0] as LaunchEvent;
+      expect(event.kind).toBe('files');
+      if (event.kind === 'files') {
+        expect(event.entries[0]!.file).toBe(fileA);
+        expect(event.entries[0]!.handle).toBe(handleA);
+      }
+    }
 
-    const handleB = makeHandle(new File(['[]'], 'b.json'));
+    const fileB = new File(['[]'], 'b.json');
+    const handleB = makeHandle(fileB);
     await consumer!({ files: [handleB], targetURL: 'https://jotjson.com/' });
     await flush();
-    expect(controller.currentFileHandle()).toBe(handleB);
+    {
+      const event = handler.mock.lastCall![0] as LaunchEvent;
+      expect(event.kind).toBe('files');
+      if (event.kind === 'files') {
+        expect(event.entries[0]!.file).toBe(fileB);
+        expect(event.entries[0]!.handle).toBe(handleB);
+      }
+    }
   });
 });
