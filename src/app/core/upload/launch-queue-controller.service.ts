@@ -1,5 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
-import { Injectable, PLATFORM_ID, Signal, inject, signal } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { LoggerService } from '../telemetry/logger.service';
 
 /**
@@ -39,8 +39,46 @@ import { LoggerService } from '../telemetry/logger.service';
  *   avoid a permission-prompt flood; we deliver the first handle and
  *   the downstream `tooMany` validator never gets a chance to trip.
  */
+/**
+ * A single file delivered by the launch queue: the resolved `File` (read
+ * via `handle.getFile()`) paired with the originating writable handle.
+ * `handle` is the W3C File System Access API entry point for write-back;
+ * downstream consumers persist it on the `DocumentBacking` union variant
+ * for the editor document (see `core/upload/document-backing.ts`).
+ *
+ * `handle` is **non-null in production** for launchQueue deliveries (the
+ * controller obtained the File by calling `handle.getFile()`, so the
+ * handle must exist), but the type is `FileSystemFileHandle | null` to
+ * mirror the shape used by the drop-controller's per-item handle slot
+ * (see `DocumentDropController.DropHandler`) so consumers have one
+ * uniform `(file, handle | null)` contract across all three adoption
+ * paths: launchQueue, file picker, and drag-drop.
+ *
+ * Internal: kept un-exported until Phase 3 of M-PWA-write-back wires
+ * `HomeComponent.onFilesReceived` to consume the handle. Inlined as a
+ * named interface (rather than an anonymous tuple) so the JSDoc has a
+ * home; flip to `export` when the first non-test cross-module consumer
+ * lands.
+ */
+interface LaunchFileEntry {
+  readonly file: File;
+  readonly handle: FileSystemFileHandle | null;
+}
+
 export type LaunchEvent =
-  | { kind: 'files'; files: readonly File[] }
+  | {
+      kind: 'files';
+      entries: readonly LaunchFileEntry[];
+      /**
+       * Echo of `LaunchParams.targetURL`, the URL the user navigated to
+       * when the launch fired. Preserved for forward-compatibility with
+       * launch_handler `client_mode` values other than `navigate-new`
+       * (where the launch could land on a non-`/` deep link). Currently
+       * always the home URL since the manifest declares
+       * `file_handlers[].action: "/"`, but consumers should not assume.
+       */
+      targetURL: string;
+    }
   | { kind: 'error'; cause: unknown };
 
 export type LaunchHandler = (event: LaunchEvent) => void | Promise<void>;
@@ -55,17 +93,6 @@ export class LaunchQueueController {
   // newer handler has taken over and bail out instead of clobbering
   // it (mirrors DocumentDropController stale-dispose safety).
   private registrationId = 0;
-
-  private readonly latestFileHandle = signal<FileSystemFileHandle | null>(null);
-
-  /**
-   * Read-only handle to the most recently opened file. Reserved for a
-   * future write-back follow-on (`createWritable()`); v1 does not
-   * consume it but keeping the handle alive on this signal avoids a
-   * second permission prompt when the feature lands (architect F8).
-   */
-  readonly currentFileHandle: Signal<FileSystemFileHandle | null> =
-    this.latestFileHandle.asReadonly();
 
   constructor() {
     if (!isPlatformBrowser(this.platformId)) return;
@@ -113,10 +140,13 @@ export class LaunchQueueController {
     // truncating here keeps the user from re-confirming N prompts
     // just to land on an error snackbar.
     const handle = handles[0];
-    this.latestFileHandle.set(handle);
     try {
       const file = await handle.getFile();
-      await this.deliver({ kind: 'files', files: [file] });
+      await this.deliver({
+        kind: 'files',
+        entries: [{ file, handle }],
+        targetURL: params.targetURL,
+      });
     } catch (cause) {
       this.logger.error('home.fileHandler.readFailed', cause);
       await this.deliver({ kind: 'error', cause });
