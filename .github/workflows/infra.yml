@@ -69,7 +69,7 @@ on:
   workflow_dispatch: {}
 
 # Workflow-level permissions are the minimum every job needs:
-#   - contents: read   -- actions/checkout@v6 (every job)
+#   - contents: read   -- actions/checkout@v7 (every job)
 #
 # Per-job escalations live in each job's `permissions:` block:
 #   - validate -> id-token: write (azure/login@v3 for what-if)
@@ -99,7 +99,7 @@ jobs:
     outputs:
       infra: ${{ steps.filter.outputs.infra }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # dorny/paths-filter@v4 uses git commands (not the API) on
           # `push` events where the pushed branch equals `base`, which
@@ -130,7 +130,7 @@ jobs:
     if: needs.changes.outputs.infra == 'true'
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Build main.bicep
         run: az bicep build --file infra/main.bicep
       - name: Validate dev.bicepparam
@@ -156,7 +156,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Azure login (OIDC)
         uses: azure/login@v3
         with:
@@ -214,7 +214,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
