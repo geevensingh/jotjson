@@ -18,9 +18,9 @@
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
-    "@azure/cosmos": "^4.9.3",
-    "@azure/functions": "^4.16.0",
-    "@azure/identity": "^4.5.0",
+    "@azure/cosmos": "^4.10.0",
+    "@azure/functions": "^4.16.2",
+    "@azure/identity": "^4.13.2",
     "applicationinsights": "^3.14.0",
     "jsonc-parser": "^3.3.1",
     "jsonwebtoken": "^9.0.3",
