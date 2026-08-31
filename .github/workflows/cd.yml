@@ -172,7 +172,7 @@ jobs:
       # Path 2: workflow_dispatch - build inline on the runner.
       # The api install below is shared between both paths.
       # ------------------------------------------------------------------
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         if: steps.check.outputs.have_token == 'true'
         with:
           node-version: 24
