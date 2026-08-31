@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Build main.bicep
         run: az bicep build --file infra/main.bicep
       - name: Validate nonprod.bicepparam
@@ -51,7 +51,7 @@ jobs:
       id-token: write
     environment: nonprod
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Azure login (OIDC)
         uses: azure/login@v3
         with:
@@ -95,7 +95,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
