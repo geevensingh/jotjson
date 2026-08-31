@@ -8,7 +8,7 @@ on:
 
 # Workflow-level permissions are the absolute minimum every job
 # needs:
-#   - contents: read   -- actions/checkout@v6 (every job)
+#   - contents: read   -- actions/checkout@v7 (every job)
 #
 # Per-job escalations live in each job's `permissions:` block:
 #   - web             -> id-token: write (azure/login@v3 for sourcemap upload)
@@ -51,7 +51,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history so `git rev-list --count HEAD` in
           # scripts/write-build-info.mjs returns a real build counter.
@@ -414,7 +414,7 @@ jobs:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -505,7 +505,7 @@ jobs:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -611,7 +611,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # Pinned per #69. Both the install script URL and the binary
       # version resolve to the v1.7.12 release tag (not `main` or
       # "latest") so CI runs are reproducible against accidental
@@ -656,7 +656,7 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -723,7 +723,7 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 24
