@@ -11,7 +11,11 @@ import { type Mock, type Mocked } from 'vitest';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import { provideStubEnvLabel } from '../../../testing/env.testing';
 import { installMatchMediaStub } from '../../../testing/match-media.testing';
-import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
+import {
+  installMinimalMonacoStub,
+  pinMinimalMonacoLoaderForFile,
+  restoreMonacoStub,
+} from '../../../testing/monaco.testing';
 import { BlobService, type BlobSyncEvent } from '../../core/api/blob.service';
 import type { BlobHighlight, JsonBlob } from '../../core/api/models';
 import { AuthService } from '../../core/auth/auth.service';
@@ -69,6 +73,16 @@ const DRAFT_KEY = 'jotjson.draft.v1';
 const SPLIT_KEY = 'jotjson.splitRatio.v1';
 const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
+
+// Issue #513: every `HomeComponent` mount embeds `<jj-json-editor>`, whose
+// async `ngAfterViewInit` can outlive the test that triggered it and reach
+// `loadMonaco()` after `restoreMonacoStub()` has run. Unpinned, that
+// injects the real `/vs/loader.js` into a unit realm - which is
+// irreversible and, once another file in the same realm clears the
+// loader's cached promise, detonates as a duplicate-injection
+// `SyntaxError`. Pinning at file scope closes the gap the per-test stub
+// cannot cover.
+pinMinimalMonacoLoaderForFile();
 
 /**
  * Registers `installMinimalMonacoStub` / `restoreMonacoStub` as
@@ -8025,6 +8039,8 @@ describe('HomeComponent splash render-complete hook (Phase C)', () => {
 });
 
 describe('HomeComponent file-backed flow (M-PWA write-back Phase 3b)', () => {
+  setupMinimalMonacoStub();
+
   function makeFile(name = 'data.json', content = '{"k":1}'): File {
     return new File([content], name, {
       type: 'application/json',

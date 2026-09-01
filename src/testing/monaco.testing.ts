@@ -13,8 +13,16 @@
  *
  *   beforeEach(() => installMinimalMonacoStub());
  *   afterEach(() => restoreMonacoStub());
+ *
+ * A `window.monaco` stub alone is not airtight: it only covers the window
+ * between `installMinimalMonacoStub()` and `restoreMonacoStub()`, and an
+ * async component lifecycle can outlive its test and call `loadMonaco()`
+ * in the gap. Unit-level files that must never touch the real AMD loader
+ * should additionally call {@link pinMinimalMonacoLoaderForFile} once at
+ * file scope (issue #513).
  */
 import type * as MonacoNS from 'monaco-editor';
+import { __setMonacoLoaderPromiseForTesting } from '../app/shared/components/json-editor/monaco-loader';
 
 interface SavedMonaco {
   previous: typeof MonacoNS | undefined;
@@ -196,4 +204,43 @@ export function restoreMonacoStub(): void {
     winRef.monaco = saved.previous;
   }
   saved = undefined;
+}
+
+let pinnedMonaco: typeof MonacoNS | undefined;
+
+/**
+ * Pins `loadMonaco()` to a minimal stub for the whole calling test FILE
+ * and never unpins it. Call once at file scope.
+ *
+ * Why this exists (issue #513): `installMinimalMonacoStub()` /
+ * `restoreMonacoStub()` only cover the span of a single test. A
+ * `JsonEditorComponent` lifecycle that outlives its test - an async
+ * `ngAfterViewInit` reached by a late change-detection pass - calls
+ * `loadMonaco()` in the uncovered gap, finds no stub, and injects the
+ * real `/vs/loader.js` into a *unit* realm. Loading the real Monaco
+ * distribution is the browser-integration layer's job (see
+ * `DESIGN_SPEC.md` -> Testing strategy), and the injection is
+ * irreversible per realm.
+ *
+ * The stub is installed **both** as the loader override and on
+ * `window.monaco`. Both matter: the override wins ahead of the
+ * `window.monaco` shortcut inside `loadMonaco()`, so pinning alone
+ * would leave `hasCachedMonaco` false in
+ * `JsonEditorComponent.ngAfterViewInit` and emit `monaco.loaded` once
+ * per fixture - contradicting that token's documented
+ * once-per-page-load contract.
+ *
+ * Test files run with realms shared across files, so a file that must
+ * NOT see this pin (the `JsonEditorComponent` unit and browser
+ * integration specs) clears it on entry with
+ * `__setMonacoLoaderPromiseForTesting(undefined)` rather than relying
+ * on this file to unpin.
+ */
+export function pinMinimalMonacoLoaderForFile(): void {
+  if (!pinnedMonaco) {
+    pinnedMonaco = buildMinimalMonaco();
+  }
+  const winRef = window as unknown as { monaco?: typeof MonacoNS };
+  winRef.monaco = pinnedMonaco;
+  __setMonacoLoaderPromiseForTesting(Promise.resolve(pinnedMonaco));
 }

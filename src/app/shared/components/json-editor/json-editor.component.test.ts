@@ -6,7 +6,10 @@ import { installMinimalMonacoStub, restoreMonacoStub } from '../../../../testing
 import type { JsonParseError } from '../../../core/json/json-parser.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { JsonEditorComponent } from './json-editor.component';
-import { __resetMonacoLoaderForTesting, __setMonacoLoaderPromiseForTesting } from './monaco-loader';
+import {
+  __resetMonacoLoaderCacheForTesting,
+  __setMonacoLoaderPromiseForTesting,
+} from './monaco-loader';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 
@@ -289,6 +292,9 @@ describe('JsonEditorComponent', () => {
   let originalMonaco: unknown;
   let originalResizeObserver: typeof window.ResizeObserver | undefined;
   let minimalMonacoInstalled = false;
+  let originalRequire: typeof window.require;
+  let originalMonacoEnvironment: typeof window.MonacoEnvironment;
+  let loaderScriptPlaceholder: HTMLScriptElement | undefined;
 
   async function createFixtureWithoutSettling(
     initial = '{"a":1}',
@@ -316,6 +322,14 @@ describe('JsonEditorComponent', () => {
   beforeEach(() => {
     localStorage.removeItem(STORAGE_KEY);
 
+    // Realms are shared across test files, so a loader override pinned by
+    // another file (see `pinMinimalMonacoLoaderForFile`) can still be
+    // installed when this file starts. It takes precedence over
+    // `window.monaco`, so clear it explicitly rather than assuming the
+    // previous file unpinned (issue #513).
+    __setMonacoLoaderPromiseForTesting(undefined);
+    __resetMonacoLoaderCacheForTesting();
+
     editor = makeFakeEditor('{"a":1}');
     monaco = makeFakeMonaco(editor);
     logger = { error: vi.fn(), event: vi.fn() } as unknown as Mocked<LoggerService>;
@@ -323,6 +337,14 @@ describe('JsonEditorComponent', () => {
 
     originalMonaco = (window as unknown as { monaco?: unknown }).monaco;
     (window as unknown as { monaco: FakeMonaco }).monaco = monaco;
+
+    // This file installs fake `window.require` values and placeholder
+    // loader scripts. The loader's reset seam no longer removes them
+    // (it cannot honestly undo a real loader evaluation), so the test
+    // that installs a global owns restoring it.
+    originalRequire = window.require;
+    originalMonacoEnvironment = window.MonacoEnvironment;
+    loaderScriptPlaceholder = undefined;
 
     originalResizeObserver = window.ResizeObserver;
     resizeObserver = {
@@ -340,12 +362,25 @@ describe('JsonEditorComponent', () => {
       restoreMonacoStub();
       minimalMonacoInstalled = false;
     }
-    __resetMonacoLoaderForTesting();
+    __setMonacoLoaderPromiseForTesting(undefined);
+    __resetMonacoLoaderCacheForTesting();
     if (originalMonaco === undefined) {
       delete (window as unknown as { monaco?: unknown }).monaco;
     } else {
       (window as unknown as { monaco: unknown }).monaco = originalMonaco;
     }
+    if (originalRequire === undefined) {
+      delete window.require;
+    } else {
+      window.require = originalRequire;
+    }
+    if (originalMonacoEnvironment === undefined) {
+      delete window.MonacoEnvironment;
+    } else {
+      window.MonacoEnvironment = originalMonacoEnvironment;
+    }
+    loaderScriptPlaceholder?.remove();
+    loaderScriptPlaceholder = undefined;
     if (originalResizeObserver) {
       window.ResizeObserver = originalResizeObserver;
     } else {
@@ -358,6 +393,7 @@ describe('JsonEditorComponent', () => {
     const script = document.createElement('script');
     script.dataset['monacoLoader'] = 'true';
     document.head.appendChild(script);
+    loaderScriptPlaceholder = script;
   }
 
   function installRequireThatLoadsFakeMonaco(): void {
@@ -398,7 +434,8 @@ describe('JsonEditorComponent', () => {
   });
 
   it('emits monaco.loaded with load time when Monaco is loaded uncached', async () => {
-    __resetMonacoLoaderForTesting();
+    delete (window as unknown as { monaco?: unknown }).monaco;
+    __resetMonacoLoaderCacheForTesting();
     installMonacoLoaderScriptPlaceholder();
     installRequireThatLoadsFakeMonaco();
     await create();
@@ -427,7 +464,8 @@ describe('JsonEditorComponent', () => {
   });
 
   it('does not emit monaco.loaded when Monaco loading fails', async () => {
-    __resetMonacoLoaderForTesting();
+    delete (window as unknown as { monaco?: unknown }).monaco;
+    __resetMonacoLoaderCacheForTesting();
     installMonacoLoaderScriptPlaceholder();
     installRequireThatLeavesMonacoUnavailable();
     await create();
@@ -460,7 +498,7 @@ describe('JsonEditorComponent', () => {
   // undefined), so any creation here would leak as a zombie.
   it('does not create Monaco when fixture is destroyed before loadMonaco resolves', async () => {
     delete (window as unknown as { monaco?: unknown }).monaco;
-    __resetMonacoLoaderForTesting();
+    __resetMonacoLoaderCacheForTesting();
     let resolveLoader!: (value: typeof MonacoNS) => void;
     const deferred = new Promise<typeof MonacoNS>((resolve) => {
       resolveLoader = resolve;
@@ -652,7 +690,7 @@ describe('JsonEditorComponent', () => {
   describe('replaceAll, applyEdit, and undo helpers', () => {
     it('replaceAll returns modelNull and does not mutate when editor is not yet initialized', async () => {
       delete (window as unknown as { monaco?: unknown }).monaco;
-      __resetMonacoLoaderForTesting();
+      __resetMonacoLoaderCacheForTesting();
       let resolveLoader!: (value: typeof MonacoNS) => void;
       const deferred = new Promise<typeof MonacoNS>((resolve) => {
         resolveLoader = resolve;
@@ -742,7 +780,7 @@ describe('JsonEditorComponent', () => {
 
     it('returns false when the editor is not yet ready', async () => {
       delete (window as unknown as { monaco?: unknown }).monaco;
-      __resetMonacoLoaderForTesting();
+      __resetMonacoLoaderCacheForTesting();
       let resolveLoader!: (value: typeof MonacoNS) => void;
       const deferred = new Promise<typeof MonacoNS>((resolve) => {
         resolveLoader = resolve;

@@ -2,8 +2,17 @@ import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { provideFakeAuth } from '../../../testing/auth.testing';
-import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
+import {
+  installMinimalMonacoStub,
+  pinMinimalMonacoLoaderForFile,
+  restoreMonacoStub,
+} from '../../../testing/monaco.testing';
 import { HomeComponent } from './home.component';
+
+// Issue #513 - see the matching note in `home.component.test.ts`. This
+// spec never destroys its fixtures, so a late `JsonEditorComponent`
+// lifecycle could reach `loadMonaco()` after `restoreMonacoStub()`.
+pinMinimalMonacoLoaderForFile();
 
 /**
  * Lightweight DOM-pattern shell spec for the home route. The full axe scan
