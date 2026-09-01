@@ -97,7 +97,7 @@ jobs:
             echo "have_token=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: steps.check.outputs.have_token == 'true'
         with:
           # Deploy the exact commit that passed CI when triggered via
