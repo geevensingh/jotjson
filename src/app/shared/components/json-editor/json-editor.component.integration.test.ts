@@ -38,12 +38,9 @@ import { TestBed } from '@angular/core/testing';
 import type * as MonacoNS from 'monaco-editor';
 import { type Mock } from 'vitest';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
+import { clearLeakedMonacoStub } from '../../../../testing/monaco.testing';
 import { JsonEditorComponent } from './json-editor.component';
-import {
-  __resetMonacoLoaderCacheForTesting,
-  __setMonacoLoaderPromiseForTesting,
-  loadMonaco,
-} from './monaco-loader';
+import { __resetMonacoLoaderCacheForTesting, loadMonaco } from './monaco-loader';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const HOST_WIDTH_PX = 800;
@@ -102,12 +99,14 @@ describe('JsonEditorComponent (browser integration)', () => {
 
   beforeAll(async () => {
     // This is the one layer that legitimately evaluates the real AMD
-    // loader, so it must not inherit a stub override pinned by a
-    // unit-level spec that shared this realm (issue #513). Clearing the
-    // override is enough: the loader's realm state is deliberately NOT
-    // resettable, and re-injecting `/vs/loader.js` into a realm that
-    // already evaluated it is a hard `SyntaxError`.
-    __setMonacoLoaderPromiseForTesting(undefined);
+    // loader, so it must not inherit unit-level loader state from a
+    // spec file that shared this realm (issue #513): a pinned override
+    // or a leaked `window.monaco` stub would both make `loadMonaco()`
+    // return a stub and skip initializing `window.MonacoEnvironment`.
+    // The loader's realm state is deliberately NOT resettable -
+    // re-injecting `/vs/loader.js` into a realm that already evaluated
+    // it is a hard `SyntaxError`.
+    clearLeakedMonacoStub();
     __resetMonacoLoaderCacheForTesting();
     monaco = await loadMonaco();
     installNoopMonacoWorker();
