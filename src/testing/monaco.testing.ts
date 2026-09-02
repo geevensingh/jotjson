@@ -13,8 +13,16 @@
  *
  *   beforeEach(() => installMinimalMonacoStub());
  *   afterEach(() => restoreMonacoStub());
+ *
+ * A `window.monaco` stub alone is not airtight: it only covers the window
+ * between `installMinimalMonacoStub()` and `restoreMonacoStub()`, and an
+ * async component lifecycle can outlive its test and call `loadMonaco()`
+ * in the gap. Unit-level files that must never touch the real AMD loader
+ * should additionally call {@link pinMinimalMonacoLoaderForFile} once at
+ * file scope (issue #513).
  */
 import type * as MonacoNS from 'monaco-editor';
+import { __setMonacoLoaderPromiseForTesting } from '../app/shared/components/json-editor/monaco-loader';
 
 interface SavedMonaco {
   previous: typeof MonacoNS | undefined;
@@ -157,8 +165,17 @@ function NoopRange(
   this.endColumn = endColumn;
 }
 
+/**
+ * Brands every stub this module builds so a spec that must reach the
+ * real AMD loader can tell a leaked stub from a real `monaco`
+ * namespace. Realms are shared across test files, so "is this
+ * `window.monaco` mine?" is a question that actually needs answering.
+ */
+const MINIMAL_STUB_MARKER = '__jjMinimalMonacoStub';
+
 function buildMinimalMonaco(): typeof MonacoNS {
   const stub = {
+    [MINIMAL_STUB_MARKER]: true,
     editor: {
       create: (_host: HTMLElement, options: { value?: string } | undefined) =>
         makeMinimalEditor(options && typeof options.value === 'string' ? options.value : ''),
@@ -196,4 +213,70 @@ export function restoreMonacoStub(): void {
     winRef.monaco = saved.previous;
   }
   saved = undefined;
+}
+
+let pinnedMonaco: typeof MonacoNS | undefined;
+
+/**
+ * Pins `loadMonaco()` to a minimal stub for the whole calling test FILE
+ * and never unpins it. Call once at file scope.
+ *
+ * Why this exists (issue #513): `installMinimalMonacoStub()` /
+ * `restoreMonacoStub()` only cover the span of a single test. A
+ * `JsonEditorComponent` lifecycle that outlives its test - an async
+ * `ngAfterViewInit` reached by a late change-detection pass - calls
+ * `loadMonaco()` in the uncovered gap, finds no stub, and injects the
+ * real `/vs/loader.js` into a *unit* realm. Loading the real Monaco
+ * distribution is the browser-integration layer's job (see
+ * `DESIGN_SPEC.md` -> Testing strategy), and the injection is
+ * irreversible per realm.
+ *
+ * This pins **only** the loader override and deliberately does NOT
+ * touch `window.monaco`. Test realms are shared across files, and
+ * `window.monaco` is the one guard `loadMonaco()` honours before
+ * entering its executor - a permanent stub there would leak into the
+ * browser-integration spec, hand it a stub instead of real Monaco, and
+ * leave `window.MonacoEnvironment` uninitialized. The per-test
+ * `installMinimalMonacoStub()` still sets `window.monaco` for the span
+ * of each test, which is what keeps
+ * `JsonEditorComponent.ngAfterViewInit`'s `hasCachedMonaco` check (and
+ * therefore the `monaco.loaded` once-per-page-load contract) accurate
+ * everywhere it is observable.
+ *
+ * A file that must NOT see this pin - the `JsonEditorComponent` unit
+ * and browser-integration specs - clears it on entry with
+ * `__setMonacoLoaderPromiseForTesting(undefined)` rather than relying
+ * on the previous file to have unpinned.
+ */
+export function pinMinimalMonacoLoaderForFile(): void {
+  if (!pinnedMonaco) {
+    pinnedMonaco = buildMinimalMonaco();
+  }
+  __setMonacoLoaderPromiseForTesting(Promise.resolve(pinnedMonaco));
+}
+
+/**
+ * Clears unit-level loader state that another spec file may have left
+ * on this realm, so a spec that must exercise the REAL AMD loader is
+ * never handed a stub.
+ *
+ * Realms are shared across test files, and `loadMonaco()` honours
+ * `window.monaco` before it does anything else - so a leaked stub
+ * makes it return early without initializing
+ * `window.MonacoEnvironment`, which the browser-integration spec needs.
+ * The predecessor of `__resetMonacoLoaderCacheForTesting()` used to
+ * delete `window.monaco` unconditionally and covered this by accident;
+ * this helper does it deliberately and narrowly.
+ *
+ * A **real** `monaco` namespace is left alone on purpose: re-requiring
+ * an already-evaluated `vs/editor/editor.main` does not re-assign
+ * `window.monaco`, so deleting a real one would be unrecoverable
+ * within the realm.
+ */
+export function clearLeakedMonacoStub(): void {
+  __setMonacoLoaderPromiseForTesting(undefined);
+  const current: unknown = window.monaco;
+  if (typeof current === 'object' && current !== null && MINIMAL_STUB_MARKER in current) {
+    delete window.monaco;
+  }
 }

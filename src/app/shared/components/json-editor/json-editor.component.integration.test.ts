@@ -38,8 +38,9 @@ import { TestBed } from '@angular/core/testing';
 import type * as MonacoNS from 'monaco-editor';
 import { type Mock } from 'vitest';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
+import { clearLeakedMonacoStub } from '../../../../testing/monaco.testing';
 import { JsonEditorComponent } from './json-editor.component';
-import { __resetMonacoLoaderForTesting, loadMonaco } from './monaco-loader';
+import { __resetMonacoLoaderCacheForTesting, loadMonaco } from './monaco-loader';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const HOST_WIDTH_PX = 800;
@@ -97,17 +98,33 @@ describe('JsonEditorComponent (browser integration)', () => {
   let noopWorkerBlobUrl: string | undefined;
 
   beforeAll(async () => {
-    __resetMonacoLoaderForTesting();
+    // This is the one layer that legitimately evaluates the real AMD
+    // loader, so it must not inherit unit-level loader state from a
+    // spec file that shared this realm (issue #513): a pinned override
+    // or a leaked `window.monaco` stub would both make `loadMonaco()`
+    // return a stub and skip initializing `window.MonacoEnvironment`.
+    // The loader's realm state is deliberately NOT resettable -
+    // re-injecting `/vs/loader.js` into a realm that already evaluated
+    // it is a hard `SyntaxError`.
+    clearLeakedMonacoStub();
+    __resetMonacoLoaderCacheForTesting();
     monaco = await loadMonaco();
     installNoopMonacoWorker();
   });
 
   afterAll(() => {
+    // Drop our worker hook BEFORE revoking its blob URL. `loadMonaco()`
+    // owns `getWorkerUrl` on this global and we only ever added
+    // `getWorker`; leaving a `getWorker` closure pointing at a revoked
+    // URL would hand the next editor mount in this realm a dead worker.
+    if (window.MonacoEnvironment) {
+      delete window.MonacoEnvironment.getWorker;
+    }
     if (noopWorkerBlobUrl) {
       URL.revokeObjectURL(noopWorkerBlobUrl);
       noopWorkerBlobUrl = undefined;
     }
-    __resetMonacoLoaderForTesting();
+    __resetMonacoLoaderCacheForTesting();
   });
 
   /**

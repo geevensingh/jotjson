@@ -6,7 +6,10 @@ import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { AA_THRESHOLD, contrastRatio } from '../../utils/contrast';
 import { JsonEditorComponent } from './json-editor.component';
-import { __resetMonacoLoaderForTesting, __setMonacoLoaderPromiseForTesting } from './monaco-loader';
+import {
+  __resetMonacoLoaderCacheForTesting,
+  __setMonacoLoaderPromiseForTesting,
+} from './monaco-loader';
 
 /**
  * Regression spec for #145 -- the lazy-load placeholder
@@ -131,7 +134,12 @@ describe('JsonEditorComponent .editor-loading placeholder contrast (#145)', () =
     testWrapper = null;
 
     suspendedReject(new Error('test ended; suspended Monaco loader cleaned up'));
-    __resetMonacoLoaderForTesting();
+    // The cache seam no longer clears the override (it only drops the
+    // module's memoized promise), so the owner of the override clears
+    // it - otherwise this file's never-resolving promise would leak
+    // into whichever spec file shares this realm next (issue #513).
+    __setMonacoLoaderPromiseForTesting(undefined);
+    __resetMonacoLoaderCacheForTesting();
 
     if (originalStorageValue === null) {
       localStorage.removeItem(STORAGE_KEY);
