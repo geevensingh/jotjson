@@ -29,10 +29,10 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^24.12.4",
-    "jest": "^30.4.2",
+    "@types/node": "^24.13.3",
+    "jest": "^30.5.0",
     "jest-junit": "^17.0.0",
-    "ts-jest": "^29.4.11",
+    "ts-jest": "^29.4.12",
     "typescript": "~6.0.3"
   }
 }
