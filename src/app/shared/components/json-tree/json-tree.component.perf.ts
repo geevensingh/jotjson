@@ -60,15 +60,22 @@ function defaultFixtures(): FixtureSpec[] {
   //   - 10K + 100K are enabled by default. Virtualization made 100K
   //     viable; each iter is now bounded by the viewport window, not
   //     the full node count.
-  //   - 1M is opt-in via `window.__perfL2Force1M = true` or `?force1m=1`.
-  //     Each iter is many minutes (build/expand traversal dominates);
-  //     reserve for deliberate diagnostic runs.
+  //   - 1M is opt-in via `JOTJSON_PERF_L2_FORCE_1M=1`, which routes
+  //     through `vitest.perf.config.mts` to include the
+  //     `src/testing/perf-l2-force-1m.ts` setupFile. That setupFile
+  //     sets `window.__perfL2Force1M = true` in the browser context
+  //     before this spec loads. For interactive DevTools use, set
+  //     `window.__perfL2Force1M = true` directly. Each iter is many
+  //     minutes (build/expand traversal dominates); reserve for
+  //     deliberate diagnostic runs.
   //   - `mixed-d10 @ 380k` (the ~5 MB NFR-anchor fixture from F-2)
   //     is opt-in via `window.__perfL2Force5MB = true` or
   //     `?force5mb=1`. Per skeptic #4: at default settings a 380K-
   //     node fixture extrapolated linearly from 100K's ~50 s/iter
-  //     risks the per-test timeout. The flag mirrors the existing
-  //     `?force1m=1` pattern.
+  //     risks the per-test timeout. The flag is the 5MB opt-in path
+  //     today; an env-var setupFile parallel to
+  //     `JOTJSON_PERF_L2_FORCE_1M` can follow in a separate issue
+  //     if needed.
   // Defaults intentionally cap so unattended `npm run perf:l2`
   // stays well under the per-test timeout (15 min in
   // `vitest.perf.config.mts`).
@@ -77,7 +84,7 @@ function defaultFixtures(): FixtureSpec[] {
     __perfL2Force5MB?: boolean;
   };
   const win = window as ForceWindow;
-  const force1M = win.__perfL2Force1M === true || location.search.includes('force1m=1');
+  const force1M = win.__perfL2Force1M === true;
   const force5MB = win.__perfL2Force5MB === true || location.search.includes('force5mb=1');
   const enabledNodeCounts = new Set<number>([10_000, 100_000]);
   if (force1M) enabledNodeCounts.add(1_000_000);
