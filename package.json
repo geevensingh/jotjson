@@ -108,7 +108,7 @@
     "@vitest/coverage-v8": "^4.1.7",
     "axe-core": "^4.11.4",
     "husky": "^9.1.7",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.2.0",
     "knip": "~6.14.2",
     "lint-staged": "^17.0.5",
     "playwright": "^1.60.0",
