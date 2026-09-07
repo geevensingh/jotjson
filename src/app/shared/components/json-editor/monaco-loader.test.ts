@@ -39,6 +39,16 @@ interface CapturedInjection {
 
 const fakeMonaco = {} as unknown as typeof MonacoNS;
 
+const LOADER_SCRIPT_SELECTOR = 'script[data-monaco-loader="true"]';
+
+/**
+ * The pristine prototype method, captured before any spy is installed.
+ * `interceptLoaderInjection()` spies on `document.head.appendChild` as an
+ * own property, so this stays unpatched and can re-attach elements
+ * without being swallowed by the interceptor.
+ */
+const nativeAppendChild = Node.prototype.appendChild;
+
 /**
  * A loader script the production code injected, identified by having a
  * `src`. Test-installed placeholders carry the same dataset flag but no
@@ -53,20 +63,24 @@ function isInjectedLoaderScript(node: Node): node is HTMLScriptElement {
 
 function interceptLoaderInjection(): CapturedInjection[] {
   const captured: CapturedInjection[] = [];
-  const originalAppendChild = Node.prototype.appendChild;
   vi.spyOn(document.head, 'appendChild').mockImplementation(((node: Node): Node => {
     if (isInjectedLoaderScript(node)) {
       captured.push({ script: node, statusAtAppend: window.JJ_MONACO_LOADER_STATE?.status });
       // Deliberately NOT inserted - see the file header.
       return node;
     }
-    return originalAppendChild.call(document.head, node);
+    return nativeAppendChild.call(document.head, node);
   }) as typeof document.head.appendChild);
   return captured;
 }
 
 function onlyInjection(captured: CapturedInjection[]): CapturedInjection {
-  expect(captured.length).toBe(1);
+  expect(
+    captured.length,
+    'expected loadMonaco() to inject exactly one loader script; 0 usually means this realm ' +
+      'still had a loader <script> or realm state from another spec file, so loadMonaco() ' +
+      'adopted that instead of injecting',
+  ).toBe(1);
   const first = captured[0];
   if (!first) throw new Error('expected exactly one captured loader injection');
   return first;
@@ -98,6 +112,7 @@ describe('monaco-loader', () => {
   let savedMonaco: typeof window.monaco;
   let savedEnvironment: typeof window.MonacoEnvironment;
   let insertedPlaceholders: HTMLScriptElement[] = [];
+  let detachedLoaderScripts: Array<{ script: HTMLScriptElement; parent: Node }> = [];
 
   function insertPlaceholderLoaderScript(): HTMLScriptElement {
     const script = document.createElement('script');
@@ -114,11 +129,36 @@ describe('monaco-loader', () => {
     savedEnvironment = window.MonacoEnvironment;
     insertedPlaceholders = [];
 
+    // Realms are shared across spec files, and the loader deliberately
+    // no longer removes its `<script>` on reset - pretending evaluation
+    // was reversible is what caused issue #513. So the browser
+    // integration spec's real loader element can still be sitting in
+    // this document. Detach whatever is here, or `loadMonaco()` adopts
+    // it (branch 3) instead of injecting and every case below sees zero
+    // injections. Re-attached in `afterEach` so the realm is left
+    // exactly as it was found.
+    detachedLoaderScripts = [];
+    for (const script of document.querySelectorAll<HTMLScriptElement>(LOADER_SCRIPT_SELECTOR)) {
+      const parent = script.parentNode;
+      if (!parent) continue;
+      detachedLoaderScripts.push({ script, parent });
+      parent.removeChild(script);
+    }
+
     delete window.JJ_MONACO_LOADER_STATE;
     delete window.require;
     delete window.monaco;
     __setMonacoLoaderPromiseForTesting(undefined);
     __resetMonacoLoaderCacheForTesting();
+
+    // Locks the precondition every case below depends on. Without it a
+    // leaked loader script turns into ten confusing "expected 0 to be 1"
+    // assertion failures instead of one message naming the cause.
+    expect(
+      document.querySelector(LOADER_SCRIPT_SELECTOR),
+      'this realm must start with no loader <script> visible, or loadMonaco() adopts it ' +
+        'instead of injecting',
+    ).toBeNull();
   });
 
   afterEach(() => {
@@ -129,6 +169,13 @@ describe('monaco-loader', () => {
       placeholder.remove();
     }
     insertedPlaceholders = [];
+
+    // Native appendChild: the interceptor spy may still be installed on
+    // `document.head`, and it swallows real loader scripts by design.
+    for (const { script, parent } of detachedLoaderScripts) {
+      nativeAppendChild.call(parent, script);
+    }
+    detachedLoaderScripts = [];
 
     if (savedRealmState === undefined) delete window.JJ_MONACO_LOADER_STATE;
     else window.JJ_MONACO_LOADER_STATE = savedRealmState;
