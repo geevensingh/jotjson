@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Verifies that both workspace lockfiles (root and `api/`) are in sync with
-// their respective `package.json` files. Catches two classes of bug:
+// their respective `package.json` files. Catches three classes of bug:
 //
 //   (a) Dependency-tree drift (e.g., `npm install --legacy-peer-deps` /
 //       `--force` overrides that omit transitive optional-peer entries
@@ -15,8 +15,36 @@
 //       prevents the third. Detected by parsing both JSON files and
 //       comparing `pkg.version === lock.version === lock.packages[""].version`.
 //
-// Implementation: runs (b) first (fast, pure JSON parse, ~5ms); if both
-// workspaces pass, runs (a) (slower, ~2s per workspace).
+//   (c) Missing `resolved`/`integrity` metadata. Issue #509: 742 of the
+//       root lockfile's 1140 `node_modules/*` entries had lost both
+//       fields, so nothing pinned a tarball hash in version control.
+//       npm still verifies downloads against the *live* packument, so
+//       this is not "no checksum at all" -- but without a committed
+//       hash npm cannot detect registry drift or a coordinated
+//       packument-plus-artifact substitution. `npm ci --dry-run` does
+//       NOT catch this: a lockfile with no integrity fields is still
+//       perfectly tree-consistent.
+//
+// Phase 1 = (b) + (c): pure JSON parse, no subprocess, ~5ms. These are
+// exactly the invariants `npm ci` does not enforce, which is why they are
+// the ones worth running in CI. Phase 2 = (a): ~2s per workspace, and
+// duplicates what CI's own `npm ci` step already does natively.
+//
+// `--metadata-only` runs Phase 1 alone. CI uses that (see the
+// "Lint - Lockfile metadata" step in .github/workflows/ci.yml, which runs
+// *before* `npm ci` because it needs no dependencies); the local `lint`
+// chain runs the full gate once.
+//
+// How entries lose their metadata (issue #509 root cause): Arborist takes
+// `resolved`/`integrity` from registry packuments. When it builds the ideal
+// tree from the on-disk `node_modules` tree instead, nodes carry neither --
+// npm >= 7 stopped writing `_resolved`/`_integrity` into installed
+// package.json files -- and they get written back stripped. Deleting the
+// lockfile while `node_modules` is still present triggers exactly that path
+// (`build-ideal-tree.js` falls back to `loadActual()` when no lockfile was
+// loaded from disk). Nothing repairs it afterwards: the one code path that
+// re-fetches metadata only fires for lockfileVersion < 2. Hence the fix
+// messages below insist on removing `node_modules` first.
 //
 // Two failure modes for (a):
 //
@@ -30,7 +58,8 @@
 //                  blip isn't misclassified as drift.
 //
 // Runs with zero dependencies on Node 24+. Invoke directly or via:
-//   npm run lint:lockfile
+//   npm run lint:lockfile           (full gate: Phase 1 + Phase 2)
+//   npm run lint:lockfile-metadata  (Phase 1 only)
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
@@ -63,6 +92,142 @@ function findNpmCli() {
     if (existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+/**
+ * Pure function: verifies that every `node_modules/*` entry in a lockfile
+ * carries the metadata that pins what npm will actually download --
+ * `resolved` (where the artifact comes from) and `integrity` (its hash).
+ *
+ * Issue #509: 742 of the root lockfile's 1140 entries had lost both. See
+ * the file header for how that happens and why `npm ci --dry-run` cannot
+ * detect it.
+ *
+ * Policy is by artifact type, not by string prefix, so the gate does not
+ * false-positive on legitimately hash-less entries:
+ *
+ *   - `link: true`    -> a symlink to a local path (workspace or `file:`
+ *                        dep). There is no tarball, so no hash exists.
+ *   - `inBundle: true`-> ships inside the parent package's tarball, which
+ *                        is itself hashed. No independent source.
+ *   - git sources     -> npm records no registry integrity for these. We
+ *                        instead require the ref to be pinned to an
+ *                        immutable 40-hex commit SHA; a mutable ref such
+ *                        as `#main` is exactly as unverifiable as a
+ *                        missing hash, so it fails.
+ *   - everything else -> registry, remote tarball, or local tarball. Must
+ *                        carry both `resolved` and a non-empty `integrity`.
+ *
+ * Presence, not grammar: we deliberately do not validate the SRI string
+ * beyond non-emptiness. Hash *correctness* is `npm ci`'s job -- it verifies
+ * each tarball on download. Re-implementing npm's accepted integrity
+ * grammar here would risk false positives for no added signal.
+ *
+ * Exported for unit-testing under `scripts/check-lockfile.test.mjs`.
+ *
+ * @param {unknown} lock - parsed package-lock.json contents
+ * @returns {{ path: string, reason: string }[]} offenders, sorted by path
+ */
+export function checkMetadataFields(lock) {
+  if (typeof lock !== 'object' || lock === null) {
+    return [{ path: '<file>', reason: 'package-lock.json did not parse to an object' }];
+  }
+  const packages = /** @type {Record<string, unknown>} */ (lock).packages;
+  if (typeof packages !== 'object' || packages === null) {
+    return [{ path: '<file>', reason: 'package-lock.json is missing the `packages` map' }];
+  }
+
+  const nonEmptyString = (value) => typeof value === 'string' && value.length > 0;
+  const offenders = [];
+
+  for (const path of Object.keys(packages).sort()) {
+    // The root entry ("") and workspace roots have no artifact of their own.
+    if (!path.startsWith('node_modules/')) continue;
+
+    const entry = /** @type {Record<string, unknown>} */ (packages)[path];
+    if (typeof entry !== 'object' || entry === null) {
+      offenders.push({ path, reason: 'entry is not an object' });
+      continue;
+    }
+    const record = /** @type {Record<string, unknown>} */ (entry);
+    if (record['link'] === true || record['inBundle'] === true) continue;
+
+    const resolved = record['resolved'];
+    const hasIntegrity = nonEmptyString(record['integrity']);
+    if (!nonEmptyString(resolved)) {
+      // Report both fields when both are gone -- that is the issue #509
+      // shape, and naming only `resolved` would send someone off to fix
+      // half the problem and re-run into the other half.
+      offenders.push({
+        path,
+        reason: hasIntegrity ? 'missing `resolved`' : 'missing `resolved` and `integrity`',
+      });
+      continue;
+    }
+
+    // Git sources: npm stores no integrity, so an immutable commit SHA is
+    // the only thing that pins the content.
+    if (/^git(\+|:)/.test(resolved)) {
+      if (!/#[0-9a-f]{40}$/.test(resolved)) {
+        offenders.push({
+          path,
+          reason: 'git source is not pinned to a 40-hex commit SHA',
+        });
+      }
+      continue;
+    }
+
+    if (!hasIntegrity) {
+      offenders.push({ path, reason: 'missing `integrity`' });
+    }
+  }
+
+  return offenders;
+}
+
+/** Number of offending entries listed before truncating the report. */
+const MAX_REPORTED_OFFENDERS = 10;
+
+/**
+ * Prints the safe lockfile-regeneration recipe for a workspace.
+ *
+ * The lines are written to be pasted and run **in sequence from the repo
+ * root**. An earlier revision prefixed each line with `cd api; `, which only
+ * works for the first line: `cd` persists, so the second would try to enter
+ * `api/api` and fail. Root-relative paths plus `npm --prefix` avoid that, and
+ * match how the repo drives the api/ workspace elsewhere (CI runs
+ * `npm --prefix api ci`).
+ *
+ * Removing `node_modules` and passing `--ignore-scripts` are both
+ * load-bearing -- see the file header for why omitting either is what
+ * produced issue #509.
+ */
+function printRegenerationSteps(workspace) {
+  const nodeModules = workspace.prefix ? `${workspace.prefix}/node_modules` : 'node_modules';
+  const prefixArg = workspace.prefix ? `--prefix ${workspace.prefix} ` : '';
+  console.error(`    Remove-Item -Recurse -Force ${nodeModules}`);
+  console.error(`    Remove-Item ${workspace.lockfile}`);
+  console.error(`    npm ${prefixArg}install --package-lock-only --ignore-scripts`);
+  console.error(`    git add ${workspace.lockfile}`);
+}
+
+function printMetadataMessage(workspace, offenders) {
+  console.error('');
+  console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (missing metadata)`);
+  console.error(
+    `  ${offenders.length} entr${offenders.length === 1 ? 'y' : 'ies'} lack${offenders.length === 1 ? 's' : ''} the \`resolved\`/\`integrity\` that pin what npm downloads.`,
+  );
+  const shown = offenders.slice(0, MAX_REPORTED_OFFENDERS);
+  for (const offender of shown) {
+    console.error(`    ${offender.path} - ${offender.reason}`);
+  }
+  if (offenders.length > shown.length) {
+    console.error(`    ... showing first ${shown.length} of ${offenders.length}`);
+  }
+  console.error('  Common cause: regenerating the lockfile while `node_modules` was present,');
+  console.error('  which makes npm rebuild entries from the on-disk tree (no metadata there).');
+  console.error('  Fix (order matters - `node_modules` MUST be absent), from the repo root:');
+  printRegenerationSteps(workspace);
 }
 
 /**
@@ -135,7 +300,13 @@ function runDryRun(NPM_CLI, workspace) {
   if (workspace.prefix) {
     args.push('--prefix', workspace.prefix);
   }
-  args.push('ci', '--dry-run', '--no-audit', '--no-fund');
+  // `--ignore-scripts` because this is a validation-only dry run: npm still
+  // fires root lifecycle scripts (`prepare` -> husky) even under --dry-run,
+  // which fails outright in a fresh clone where node_modules does not exist
+  // yet. Lifecycle scripts prove nothing about lockfile consistency, and
+  // running arbitrary install scripts from inside a lint gate is a
+  // supply-chain hazard in its own right.
+  args.push('ci', '--dry-run', '--ignore-scripts', '--no-audit', '--no-fund');
 
   const result = spawnSync(process.execPath, args, {
     encoding: 'utf8',
@@ -177,7 +348,6 @@ function runDryRun(NPM_CLI, workspace) {
 }
 
 function printDriftMessage(workspace) {
-  const cdHint = workspace.prefix ? `cd ${workspace.prefix}; ` : '';
   console.error('');
   console.error(`check-lockfile: FAILED for workspace '${workspace.name}'`);
   console.error('  Lockfile is out of sync with package.json. Common causes:');
@@ -185,10 +355,8 @@ function printDriftMessage(workspace) {
   console.error('      (forbidden by AGENTS.md without explicit user approval)');
   console.error('    - Hand-edited the lockfile');
   console.error('    - Bad merge of package*.json');
-  console.error('  Fix:');
-  console.error(`    ${cdHint}Remove-Item ${workspace.lockfile.split('/').pop()}`);
-  console.error(`    ${cdHint}npm install --package-lock-only`);
-  console.error(`    git add ${workspace.lockfile}`);
+  console.error('  Fix, from the repo root:');
+  printRegenerationSteps(workspace);
 }
 
 function printOtherFailureMessage(workspace, status) {
@@ -198,19 +366,14 @@ function printOtherFailureMessage(workspace, status) {
   );
 }
 
-export function main() {
-  const NPM_CLI = findNpmCli();
-  if (!NPM_CLI) {
-    console.error(
-      'check-lockfile: cannot locate npm-cli.js relative to process.execPath. Ensure npm is installed alongside node.',
-    );
-    return 2;
-  }
+export function main(argv = process.argv.slice(2)) {
+  const metadataOnly = argv.includes('--metadata-only');
 
   let firstFailure = null;
 
-  // Phase 1 (fast): version-drift gate. Pure JSON parse, no subprocess.
-  // Catches PR #286-class bugs that `npm ci --dry-run` does not.
+  // Phase 1 (fast): the invariants `npm ci` does NOT enforce -- root
+  // `version` drift and `resolved`/`integrity` presence. Pure JSON parse,
+  // no subprocess. This is the phase CI runs on its own, before `npm ci`.
   for (const workspace of WORKSPACES) {
     if (!existsSync(workspace.manifest) || !existsSync(workspace.lockfile)) {
       console.error(
@@ -229,18 +392,39 @@ export function main() {
       );
       return 2;
     }
-    const detail = checkVersionInSync(pkg, lock);
-    if (detail !== null) {
+    // A workspace can fail both sub-gates at once; print its FAIL header
+    // once and then every reason under it.
+    const versionDrift = checkVersionInSync(pkg, lock);
+    const offenders = checkMetadataFields(lock);
+    if (versionDrift !== null || offenders.length > 0) {
       process.stdout.write(`check-lockfile: validating workspace '${workspace.name}' ... FAIL\n`);
-      printVersionDriftMessage(workspace, detail);
-      firstFailure = { kind: 'version-drift' };
+      if (versionDrift !== null) {
+        printVersionDriftMessage(workspace, versionDrift);
+      }
+      if (offenders.length > 0) {
+        printMetadataMessage(workspace, offenders);
+      }
+      firstFailure = { kind: versionDrift !== null ? 'version-drift' : 'metadata' };
     }
   }
   if (firstFailure) {
     return 1;
   }
 
+  if (metadataOnly) {
+    console.log('check-lockfile: OK (root + api/ lockfile metadata: version, resolved, integrity)');
+    return 0;
+  }
+
   // Phase 2 (slow): dependency-tree gate via `npm ci --dry-run`.
+  const NPM_CLI = findNpmCli();
+  if (!NPM_CLI) {
+    console.error(
+      'check-lockfile: cannot locate npm-cli.js relative to process.execPath. Ensure npm is installed alongside node.',
+    );
+    return 2;
+  }
+
   for (const workspace of WORKSPACES) {
     process.stdout.write(`check-lockfile: validating workspace '${workspace.name}' ... `);
     const result = runDryRun(NPM_CLI, workspace);
