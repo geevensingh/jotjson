@@ -210,7 +210,7 @@ export function normalizeOverrides(overrides, path = []) {
  * Exported for unit testing.
  *
  * @param {Map<string, Set<string>>} effective
- * @param {Record<string, {classification: string, consumer?: string}>} policy
+ * @param {Record<string, {classification: string, consumer?: unknown, rationale?: unknown}>} policy
  * @returns {string[]} one message per violation; empty array means pass
  */
 export function checkOverridePolicy(effective, policy) {
@@ -424,6 +424,12 @@ function scanShippedTree(root, spec) {
  * "the tree" by path while no longer shipping the JavaScript this gate reads
  * a version out of.
  *
+ * Only entries inside an `assets` array are considered. Collecting every
+ * object that merely has an `input` key would risk a false match against an
+ * unrelated builder option, which could mask removal of the real `assets`
+ * mapping. Scoping to `assets` is tighter than requiring an `output` field,
+ * because Angular treats `output` as optional on an asset entry.
+ *
  * @param {unknown} angularJson
  * @param {string} assetInput
  * @returns {string | null}
@@ -431,6 +437,19 @@ function scanShippedTree(root, spec) {
 export function checkAssetMapping(angularJson, assetInput) {
   /** @type {{input: string, glob: unknown}[]} */
   const entries = [];
+  const collectFromAssets = (assets) => {
+    if (!Array.isArray(assets)) return;
+    for (const item of assets) {
+      // Angular also permits a bare string asset ("src/favicon.ico"); those
+      // carry no `input`, so they cannot match and are skipped.
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const record = /** @type {Record<string, unknown>} */ (item);
+        if (typeof record['input'] === 'string') {
+          entries.push({ input: record['input'], glob: record['glob'] });
+        }
+      }
+    }
+  };
   const visit = (node) => {
     if (Array.isArray(node)) {
       for (const item of node) visit(item);
@@ -438,8 +457,8 @@ export function checkAssetMapping(angularJson, assetInput) {
     }
     if (node && typeof node === 'object') {
       const record = /** @type {Record<string, unknown>} */ (node);
-      if (typeof record['input'] === 'string') {
-        entries.push({ input: record['input'], glob: record['glob'] });
+      if (Object.prototype.hasOwnProperty.call(record, 'assets')) {
+        collectFromAssets(record['assets']);
       }
       for (const value of Object.values(record)) visit(value);
     }

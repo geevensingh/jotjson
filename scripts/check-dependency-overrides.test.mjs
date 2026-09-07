@@ -408,6 +408,27 @@ test('checkAssetMapping rejects a narrowed glob', () => {
   assert.match(problem, /narrowed glob/);
 });
 
+test('checkAssetMapping ignores an `input` outside an assets array', () => {
+  // An unrelated builder option that happens to use the same `input` key must
+  // not satisfy the check -- otherwise removing the real assets[] mapping
+  // could slip through on a false match.
+  const angularJson = {
+    someOtherBuilderOption: { input: 'node_modules/monaco-editor/min/vs' },
+    assets: [{ input: 'public', glob: '**/*', output: 'assets' }],
+  };
+  const problem = checkAssetMapping(angularJson, 'node_modules/monaco-editor/min/vs');
+  assert.notEqual(problem, null);
+  assert.match(problem, /no longer copies/);
+});
+
+test('checkAssetMapping tolerates bare-string asset entries alongside object ones', () => {
+  // Angular permits "assets": ["src/favicon.ico"]; those carry no `input`.
+  const angularJson = {
+    assets: ['src/favicon.ico', { input: 'node_modules/monaco-editor/min/vs', glob: '**/*' }],
+  };
+  assert.equal(checkAssetMapping(angularJson, 'node_modules/monaco-editor/min/vs'), null);
+});
+
 test('checkAssetMapping reports "(none)" when there are no asset inputs at all', () => {
   const problem = checkAssetMapping({ projects: {} }, 'node_modules/monaco-editor/min/vs');
   assert.match(problem, /\(none\)/);
