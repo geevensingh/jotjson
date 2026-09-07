@@ -185,6 +185,38 @@ banner and the declared dependency.
 
 ---
 
+## Interaction with the Dependency Review check
+
+`.github/workflows/dependency-review.yml` runs
+`actions/dependency-review-action` with `fail-on-severity: moderate` on every
+PR to `main`. It reads the **lockfile diff**, so it reports advisories against
+whatever version the lockfile newly introduces.
+
+Making the lockfile honest therefore makes this check **red**, and it stays red
+for as long as the vendored copy is behind. That is the check working
+correctly: before issue #514 it was silently green because the lockfile
+claimed a version that never shipped.
+
+Do **not** make it green by:
+
+- adding the advisories to `allow-ghsas`, or
+- raising `fail-on-severity` above `moderate`.
+
+Both hide a true finding about the shipped artifact, which is the exact
+failure mode #514 exists to correct, and the severity change degrades the gate
+for every future PR rather than just this one. The check is **not** in
+`main`'s required-status-check list, so a red result does not block merge.
+
+Note that bumping the vendoring package does not necessarily clear it either.
+Monaco 0.56.0 moves the shipped DOMPurify from 3.2.7 to 3.4.8, clearing 14 of
+18 advisories -- but two of the four residuals
+(`GHSA-55q2-fjhq-7xh7`, `GHSA-cmwh-pvxp-8882`) are **medium**, so the check
+stays red until an upstream Monaco vendors `>= 3.4.13`. Treat a red Dependency
+Review on a vendored dependency as a standing, documented condition rather
+than something to be cleared.
+
+---
+
 ## Reachability assessment (DOMPurify in JotJSON)
 
 Establishes whether the advisories affecting the shipped DOMPurify are
