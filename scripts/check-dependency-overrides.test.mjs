@@ -21,7 +21,9 @@ import {
   checkAssetMapping,
   checkOverrideAgainstShipped,
   checkOverridePolicy,
+  checkPolicyVendoredConsistency,
   extractVersionsFromText,
+  isNonEmptyString,
   normalizeOverrides,
   normalizePackageKey,
 } from './check-dependency-overrides.mjs';
@@ -151,8 +153,12 @@ test('checkOverrideAgainstShipped reports every mismatched value', () => {
 // ---------------------------------------------------------------------------
 
 const SAMPLE_POLICY = {
-  'fast-uri': { classification: 'dev-only', consumer: 'ajv' },
-  hono: { classification: 'dev-only', consumer: '@hono/node-server' },
+  'fast-uri': { classification: 'dev-only', consumer: 'ajv', rationale: 'schema $ref resolution' },
+  hono: {
+    classification: 'dev-only',
+    consumer: '@hono/node-server',
+    rationale: 'dev-server tooling',
+  },
 };
 
 test('checkOverridePolicy passes when every override is classified', () => {
@@ -176,19 +182,63 @@ test('checkOverridePolicy fails on an unclassified override', () => {
 test('checkOverridePolicy rejects an unknown classification', () => {
   const effective = normalizeOverrides({ 'fast-uri': '^3.1.2' });
   const problems = checkOverridePolicy(effective, {
-    'fast-uri': { classification: 'probably-fine', consumer: 'ajv' },
+    'fast-uri': { classification: 'probably-fine', consumer: 'ajv', rationale: 'because' },
   });
   assert.equal(problems.length, 1);
   assert.match(problems[0], /unknown classification/);
 });
 
-test('checkOverridePolicy requires a named consumer for dev-only entries', () => {
+// The named-consumer requirement applies to EVERY classification, not just
+// dev-only -- prod-graph and shipped-prebuilt are the more security-relevant
+// cases, so exempting them would put the loophole in exactly the wrong place.
+for (const classification of ['dev-only', 'prod-graph', 'shipped-prebuilt']) {
+  test(`checkOverridePolicy requires a named consumer for '${classification}'`, () => {
+    const effective = normalizeOverrides({ 'fast-uri': '^3.1.2' });
+    const problems = checkOverridePolicy(effective, {
+      'fast-uri': { classification, rationale: 'because' },
+    });
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /names no specific consumer/);
+  });
+
+  test(`checkOverridePolicy requires a rationale for '${classification}'`, () => {
+    const effective = normalizeOverrides({ 'fast-uri': '^3.1.2' });
+    const problems = checkOverridePolicy(effective, {
+      'fast-uri': { classification, consumer: 'ajv' },
+    });
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /has no rationale/);
+  });
+}
+
+test('checkOverridePolicy rejects a whitespace-only consumer', () => {
+  // A truthy check alone would accept '   ' as a "named consumer".
   const effective = normalizeOverrides({ 'fast-uri': '^3.1.2' });
   const problems = checkOverridePolicy(effective, {
-    'fast-uri': { classification: 'dev-only' },
+    'fast-uri': { classification: 'dev-only', consumer: '   ', rationale: 'because' },
   });
   assert.equal(problems.length, 1);
   assert.match(problems[0], /names no specific consumer/);
+});
+
+test('checkOverridePolicy rejects a non-string consumer', () => {
+  const effective = normalizeOverrides({ 'fast-uri': '^3.1.2' });
+  const problems = checkOverridePolicy(effective, {
+    'fast-uri': { classification: 'dev-only', consumer: true, rationale: 'because' },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /names no specific consumer/);
+});
+
+test('isNonEmptyString accepts only non-blank strings', () => {
+  assert.equal(isNonEmptyString('ajv'), true);
+  assert.equal(isNonEmptyString(''), false);
+  assert.equal(isNonEmptyString('   '), false);
+  assert.equal(isNonEmptyString('\t\n'), false);
+  assert.equal(isNonEmptyString(undefined), false);
+  assert.equal(isNonEmptyString(null), false);
+  assert.equal(isNonEmptyString(42), false);
+  assert.equal(isNonEmptyString(true), false);
 });
 
 test('checkOverridePolicy flags a stale policy entry with no matching override', () => {
@@ -196,6 +246,71 @@ test('checkOverridePolicy flags a stale policy entry with no matching override',
   const problems = checkOverridePolicy(effective, SAMPLE_POLICY);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /lists 'hono' but root package.json has no such override/);
+});
+
+// ---------------------------------------------------------------------------
+// checkPolicyVendoredConsistency -- both directions
+// ---------------------------------------------------------------------------
+
+test('checkPolicyVendoredConsistency passes when the two registries agree', () => {
+  const effective = normalizeOverrides({ dompurify: '3.2.7' });
+  const policy = {
+    dompurify: {
+      classification: 'shipped-prebuilt',
+      consumer: 'monaco-editor',
+      rationale: 'vendored in min/vs',
+    },
+  };
+  assert.deepEqual(checkPolicyVendoredConsistency(effective, policy, ['dompurify']), []);
+});
+
+test('checkPolicyVendoredConsistency fails a shipped-prebuilt entry missing from VENDORED_PACKAGES', () => {
+  // Forward hole: the classification claims "this pin does not control what
+  // ships", but nothing ever reads what ships, because Part B iterates
+  // VENDORED_PACKAGES.
+  const effective = normalizeOverrides({ 'some-lib': '1.0.0' });
+  const policy = {
+    'some-lib': {
+      classification: 'shipped-prebuilt',
+      consumer: 'some-bundler',
+      rationale: 'vendored somewhere',
+    },
+  };
+  const problems = checkPolicyVendoredConsistency(effective, policy, ['dompurify']);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /absent from/);
+  assert.match(problems[0], /VENDORED_PACKAGES/);
+});
+
+test('checkPolicyVendoredConsistency fails a vendored package classified as something else', () => {
+  // Converse hole, and the subtle one: Part A accepts the classification and
+  // Part B's equality check returns null because the pin happens to MATCH the
+  // shipped version -- so without this check a materially false classification
+  // passes both parts.
+  const effective = normalizeOverrides({ dompurify: '3.2.7' });
+  const policy = {
+    dompurify: {
+      classification: 'dev-only',
+      consumer: 'monaco-editor',
+      rationale: 'looks harmless',
+    },
+  };
+  const problems = checkPolicyVendoredConsistency(effective, policy, ['dompurify']);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /classified 'dev-only'/);
+  assert.match(problems[0], /must be classified 'shipped-prebuilt'/);
+});
+
+test('checkPolicyVendoredConsistency does NOT require a policy entry for a vendored package with no override', () => {
+  // This is the desired steady state after issue #514: no override at all, so
+  // npm resolves the package from the vendoring package's own declaration.
+  assert.deepEqual(checkPolicyVendoredConsistency(new Map(), {}, ['dompurify']), []);
+});
+
+test('checkPolicyVendoredConsistency does not double-report an unclassified override', () => {
+  // checkOverridePolicy already reports the missing policy entry.
+  const effective = normalizeOverrides({ dompurify: '3.4.14' });
+  assert.deepEqual(checkPolicyVendoredConsistency(effective, {}, ['dompurify']), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -277,9 +392,20 @@ test('checkAssetMapping fails when the asset input is gone', () => {
 
 test('checkAssetMapping tolerates trailing slashes and backslashes', () => {
   const angularJson = {
-    assets: [{ input: 'node_modules\\monaco-editor\\min\\vs\\', output: 'vs' }],
+    assets: [{ input: 'node_modules\\monaco-editor\\min\\vs\\', glob: '**/*', output: 'vs' }],
   };
   assert.equal(checkAssetMapping(angularJson, 'node_modules/monaco-editor/min/vs'), null);
+});
+
+test('checkAssetMapping rejects a narrowed glob', () => {
+  // Copying only CSS would still "copy the tree" by path, but the JavaScript
+  // this gate reads a version out of would no longer ship.
+  const angularJson = {
+    assets: [{ input: 'node_modules/monaco-editor/min/vs', glob: '**/*.css', output: 'vs' }],
+  };
+  const problem = checkAssetMapping(angularJson, 'node_modules/monaco-editor/min/vs');
+  assert.notEqual(problem, null);
+  assert.match(problem, /narrowed glob/);
 });
 
 test('checkAssetMapping reports "(none)" when there are no asset inputs at all', () => {

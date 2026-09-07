@@ -1251,10 +1251,14 @@ enforcement and the field together in the same PR, or not at all.
   advisories that affect the older shipped copy. The only real remediation
   is to bump the vendoring package. Every root override must be classified
   (`dev-only` / `prod-graph` / `shipped-prebuilt`) and justified with a named
-  consumer. `scripts/check-dependency-overrides.mjs` (lint chain) enforces
-  both halves: it validates the classification table and, for
+  consumer and a rationale, for every classification.
+  `scripts/check-dependency-overrides.mjs` (lint chain) enforces both halves:
+  it validates the classification table and, for
   `shipped-prebuilt` entries, reads the version out of the bytes
   `angular.json` actually copies and asserts no override contradicts it. The
+  two registries are additionally cross-checked in both directions, so a
+  classification that disagrees with what actually ships cannot slip between
+  them. The
   motivating case - DOMPurify 3.2.7 vendored inside `monaco-editor`'s
   `min/vs` while an override claimed 3.4.1, suppressing eight true
   advisories - plus the full overrides audit, the reachability assessment,

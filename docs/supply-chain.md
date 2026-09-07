@@ -28,14 +28,35 @@ one of:
 
 | Classification | Meaning |
 | --- | --- |
-| `dev-only` | Nothing it pins ever reaches a user. The pin only constrains build tooling. Requires a **named** consumer. |
+| `dev-only` | Nothing it pins ever reaches a user. The pin only constrains build tooling. |
 | `prod-graph` | Ships via the Angular build graph. The pin genuinely controls shipped bytes. |
-| `shipped-prebuilt` | Ships vendored inside a prebuilt asset. The pin does **not** control shipped bytes. |
+| `shipped-prebuilt` | Ships vendored inside a prebuilt asset. The pin does **not** control shipped bytes. Must also appear in `VENDORED_PACKAGES`. |
+
+**Every** entry -- regardless of classification -- must additionally name a
+specific `consumer` and give a `rationale`. Both are enforced for all three
+classifications: `prod-graph` and `shipped-prebuilt` are the more
+security-relevant cases, so exempting them would put the loophole in exactly
+the wrong place.
 
 An override with no policy entry fails the gate. Naming a *specific*
 consumer is the forcing function - the same idiom `knip.jsonc` uses for its
 allowlists. If you cannot name the package that depends on it, the override
 is probably unnecessary.
+
+The two registries are also cross-checked against each other, in both
+directions:
+
+- A `shipped-prebuilt` entry absent from `VENDORED_PACKAGES` fails -- its
+  shipped bytes would never be read, since Part B iterates
+  `VENDORED_PACKAGES`.
+- An override on a package that *is* in `VENDORED_PACKAGES` but classified as
+  anything other than `shipped-prebuilt` fails. This one is subtle: Part A
+  accepts the classification, and Part B's equality check passes whenever the
+  pin happens to equal the shipped version -- so without the cross-check a
+  materially false classification would pass both parts.
+
+A vendored package with **no** override needs no policy entry. That absence
+is the desired steady state.
 
 ### 2. Never use an override to change a reported version you do not control
 

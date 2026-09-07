@@ -22,16 +22,22 @@
 // This gate makes both failure modes loud. It has two parts:
 //
 //   Part A -- every entry in root `overrides` must be classified and
-//             justified in OVERRIDE_POLICY below. An override that is not
-//             listed fails the gate. This mirrors the `knip.jsonc` allowlist
-//             idiom: adding an entry requires naming a specific mechanism,
-//             which is the forcing function.
+//             justified in OVERRIDE_POLICY below: a classification, a named
+//             consumer, and a rationale, for every classification. This
+//             mirrors the `knip.jsonc` allowlist idiom: adding an entry
+//             requires naming a specific mechanism, which is the forcing
+//             function.
 //
 //   Part B -- for every package known to ship vendored inside a prebuilt
 //             asset (VENDORED_PACKAGES), read the version out of the bytes
 //             we actually ship, corroborate it against the vendoring
 //             package's own sources, and assert that no override contradicts
 //             it.
+//
+// The two registries are also cross-checked against each other in both
+// directions (see checkPolicyVendoredConsistency), because a classification
+// that disagrees with the vendored registry can otherwise slip between the
+// two parts.
 //
 // Part B reads the version from the *minified* tree that `angular.json`
 // actually copies -- not from the ESM tree. Both are checked and must agree,
@@ -119,6 +125,19 @@ export const VENDORED_PACKAGES = [
 ];
 
 const VALID_CLASSIFICATIONS = new Set(['dev-only', 'prod-graph', 'shipped-prebuilt']);
+
+/**
+ * True only for a string with at least one non-whitespace character.
+ *
+ * Guards the justification fields: a truthy check alone would accept `'   '`,
+ * `true`, or `42` as a "named consumer".
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
 
 /**
  * Strips a version selector from an npm override key.
@@ -212,8 +231,22 @@ export function checkOverridePolicy(effective, policy) {
           `Expected one of: ${[...VALID_CLASSIFICATIONS].join(', ')}.`,
       );
     }
-    if (entry.classification === 'dev-only' && !entry.consumer) {
-      problems.push(`override '${name}' is classified 'dev-only' but names no specific consumer.`);
+    // "Classified AND justified" applies to every classification, not just
+    // dev-only. The prod-graph / shipped-prebuilt cases are the more
+    // security-relevant ones, so exempting them would put the loophole in
+    // exactly the wrong place.
+    if (!isNonEmptyString(entry.consumer)) {
+      problems.push(
+        `override '${name}' (${entry.classification}) names no specific consumer.\n` +
+          `    Name the package(s) that actually depend on '${name}'. If you cannot name one,\n` +
+          `    the override is probably unnecessary.`,
+      );
+    }
+    if (!isNonEmptyString(entry.rationale)) {
+      problems.push(
+        `override '${name}' (${entry.classification}) has no rationale.\n` +
+          `    State why the pin is needed and why this classification is correct.`,
+      );
     }
   }
   // A policy entry with no matching override is stale bookkeeping, not a
@@ -225,6 +258,73 @@ export function checkOverridePolicy(effective, policy) {
       );
     }
   }
+  return problems;
+}
+
+/**
+ * Cross-validates the two registries against each other, in BOTH directions.
+ *
+ * Part A (`checkOverridePolicy`) and Part B (`checkOverrideAgainstShipped`)
+ * each look at one registry, so a classification that disagrees with reality
+ * can slip between them:
+ *
+ *   Forward  - an override classified `shipped-prebuilt` that is NOT in
+ *              VENDORED_PACKAGES never gets its shipped bytes read at all,
+ *              because Part B iterates VENDORED_PACKAGES. The classification
+ *              claims "this pin does not control what ships" and then nothing
+ *              verifies what actually ships.
+ *
+ *   Converse - an override on a package that IS vendored, but classified as
+ *              something else (say `dev-only`), passes Part A. Part B still
+ *              runs, but `checkOverrideAgainstShipped` returns null whenever
+ *              the pinned value happens to equal the shipped version -- so a
+ *              materially false classification passes both parts today. That
+ *              matters because the classification is what a human reads to
+ *              decide whether bumping the pin is safe.
+ *
+ * Deliberately NOT enforced: a vendored package with no override needs no
+ * policy entry. That absence is the desired steady state (issue #514) --
+ * npm then resolves the package from the vendoring package's own declaration.
+ *
+ * Exported for unit testing.
+ *
+ * @param {Map<string, Set<string>>} effective
+ * @param {Record<string, {classification: string}>} policy
+ * @param {Iterable<string>} vendoredPackageNames
+ * @returns {string[]} one message per violation; empty array means pass
+ */
+export function checkPolicyVendoredConsistency(effective, policy, vendoredPackageNames) {
+  const problems = [];
+  const vendored = new Set(vendoredPackageNames);
+
+  for (const name of Object.keys(policy).sort()) {
+    if (policy[name].classification !== 'shipped-prebuilt') continue;
+    if (!vendored.has(name)) {
+      problems.push(
+        `OVERRIDE_POLICY classifies '${name}' as 'shipped-prebuilt' but it is absent from\n` +
+          `    VENDORED_PACKAGES, so its shipped bytes are never read. Either add a\n` +
+          `    VENDORED_PACKAGES entry describing where it ships, or correct the\n` +
+          `    classification.`,
+      );
+    }
+  }
+
+  for (const name of [...effective.keys()].sort()) {
+    if (!vendored.has(name)) continue;
+    const entry = policy[name];
+    // A missing policy entry is already reported by checkOverridePolicy;
+    // don't double-report it here.
+    if (!entry) continue;
+    if (entry.classification !== 'shipped-prebuilt') {
+      problems.push(
+        `override '${name}' is classified '${entry.classification}', but '${name}' ships\n` +
+          `    vendored inside a prebuilt asset (it is listed in VENDORED_PACKAGES).\n` +
+          `    It must be classified 'shipped-prebuilt' so readers know the pin does not\n` +
+          `    control what ships.`,
+      );
+    }
+  }
+
   return problems;
 }
 
@@ -316,17 +416,21 @@ function scanShippedTree(root, spec) {
 }
 
 /**
- * Asserts the configured asset input is still wired up in angular.json.
+ * Asserts the configured asset input is still wired up in angular.json as a
+ * FULL copy of the tree.
  *
- * Without this, a change to the assets glob would silently detach the gate
- * from the tree that actually ships.
+ * Matches the asset *entry*, not a bare `input` string anywhere in the file,
+ * and rejects a narrowed glob: changing `**\/*` to `*.css` would still copy
+ * "the tree" by path while no longer shipping the JavaScript this gate reads
+ * a version out of.
  *
  * @param {unknown} angularJson
  * @param {string} assetInput
  * @returns {string | null}
  */
 export function checkAssetMapping(angularJson, assetInput) {
-  const inputs = [];
+  /** @type {{input: string, glob: unknown}[]} */
+  const entries = [];
   const visit = (node) => {
     if (Array.isArray(node)) {
       for (const item of node) visit(item);
@@ -334,19 +438,40 @@ export function checkAssetMapping(angularJson, assetInput) {
     }
     if (node && typeof node === 'object') {
       const record = /** @type {Record<string, unknown>} */ (node);
-      if (typeof record['input'] === 'string') inputs.push(record['input']);
+      if (typeof record['input'] === 'string') {
+        entries.push({ input: record['input'], glob: record['glob'] });
+      }
       for (const value of Object.values(record)) visit(value);
     }
   };
   visit(angularJson);
-  const normalized = inputs.map((value) => value.replace(/\\/g, '/').replace(/\/+$/, ''));
-  if (normalized.includes(assetInput)) return null;
-  return (
-    `angular.json no longer copies '${assetInput}' as a static asset.\n` +
-    `    Asset inputs found: ${normalized.length ? normalized.join(', ') : '(none)'}\n` +
-    `    This gate reads the shipped version out of that tree, so the mapping change\n` +
-    `    must be reflected in VENDORED_PACKAGES (scripts/check-dependency-overrides.mjs).`
-  );
+
+  const normalize = (value) => value.replace(/\\/g, '/').replace(/\/+$/, '');
+  const matches = entries.filter((entry) => normalize(entry.input) === assetInput);
+
+  if (matches.length === 0) {
+    const found = entries.map((entry) => normalize(entry.input));
+    return (
+      `angular.json no longer copies '${assetInput}' as a static asset.\n` +
+      `    Asset inputs found: ${found.length ? found.join(', ') : '(none)'}\n` +
+      `    This gate reads the shipped version out of that tree, so the mapping change\n` +
+      `    must be reflected in VENDORED_PACKAGES (scripts/check-dependency-overrides.mjs).`
+    );
+  }
+
+  // A glob is optional in Angular's schema, but when present it must copy the
+  // whole tree for the shipped-bytes scan below to be meaningful.
+  const fullCopy = matches.some((entry) => entry.glob === undefined || entry.glob === '**/*');
+  if (!fullCopy) {
+    const globs = matches.map((entry) => JSON.stringify(entry.glob)).join(', ');
+    return (
+      `angular.json copies '${assetInput}' with a narrowed glob (${globs}), not '**/*'.\n` +
+      `    This gate reads the vendored version out of the JavaScript in that tree, so a\n` +
+      `    partial copy would make the reported version unrepresentative of what ships.`
+    );
+  }
+
+  return null;
 }
 
 function readJson(path) {
@@ -370,6 +495,17 @@ export function main() {
 
   // ---- Part A: classify + justify every override -------------------------
   problems.push(...checkOverridePolicy(effective, OVERRIDE_POLICY));
+
+  // ---- Cross-check the two registries against each other ------------------
+  // Runs unconditionally: a classification that disagrees with the vendored
+  // registry can otherwise slip between Part A and Part B in either direction.
+  problems.push(
+    ...checkPolicyVendoredConsistency(
+      effective,
+      OVERRIDE_POLICY,
+      VENDORED_PACKAGES.map((spec) => spec.package),
+    ),
+  );
 
   // ---- Part B: verify what actually ships --------------------------------
   for (const spec of VENDORED_PACKAGES) {
@@ -416,8 +552,17 @@ export function main() {
 
     const shippedVersion = [...versions][0];
 
-    // Corroborate against the vendoring package's unminified copy.
-    if (existsSync(spec.esmSource)) {
+    // Corroborate against the vendoring package's unminified copy. A missing
+    // source is a FAILURE, not a skip: the header advertises this gate as
+    // fail-closed, and silently dropping a corroboration source is exactly
+    // the "assumption quietly goes stale" mode it exists to prevent.
+    if (!existsSync(spec.esmSource)) {
+      problems.push(
+        `${label}: corroborating source '${spec.esmSource}' is missing, so the shipped\n` +
+          `    version ${shippedVersion} cannot be cross-checked. If ${spec.vendoredBy} moved it,\n` +
+          `    update esmSource in VENDORED_PACKAGES.`,
+      );
+    } else {
       const esmMatch = readFileSync(spec.esmSource, 'utf8').match(spec.esmPattern);
       if (!esmMatch) {
         problems.push(
@@ -432,11 +577,29 @@ export function main() {
       }
     }
 
-    // Corroborate against the vendoring package's declared dependency.
-    if (existsSync(spec.declaringManifest)) {
+    // Corroborate against the vendoring package's declared dependency. Also
+    // fail-closed: a missing manifest, or one that no longer declares the
+    // package, breaks the "declared is a faithful proxy for vendored"
+    // assumption that VENDORED_PACKAGES rests on.
+    if (!existsSync(spec.declaringManifest)) {
+      problems.push(
+        `${label}: '${spec.declaringManifest}' is missing, so the shipped version\n` +
+          `    ${shippedVersion} cannot be corroborated against the declared dependency.\n` +
+          `    Run \`npm ci\` first; if the path changed, update VENDORED_PACKAGES.`,
+      );
+      notes.push(
+        `${spec.package}: shipped ${shippedVersion} (vendored by ${spec.vendoredBy}, chunk: ${markerFiles.join(', ')})`,
+      );
+    } else {
       const manifest = readJson(spec.declaringManifest);
       const declared = manifest.dependencies?.[spec.package];
-      if (declared && declared !== shippedVersion) {
+      if (!declared) {
+        problems.push(
+          `${label}: ${spec.vendoredBy}@${manifest.version} no longer declares a '${spec.package}'\n` +
+            `    dependency, so the declared version can no longer corroborate the vendored one.\n` +
+            `    Re-verify by hand and update VENDORED_PACKAGES.`,
+        );
+      } else if (declared !== shippedVersion) {
         problems.push(
           `${label}: shipped tree reports ${shippedVersion} but ${spec.vendoredBy}@${manifest.version}\n` +
             `    declares '${spec.package}': '${declared}'. The declared dependency is no longer a\n` +
@@ -446,10 +609,6 @@ export function main() {
       notes.push(
         `${spec.package}: shipped ${shippedVersion} (vendored by ${spec.vendoredBy}@${manifest.version}, ` +
           `chunk: ${markerFiles.join(', ')})`,
-      );
-    } else {
-      notes.push(
-        `${spec.package}: shipped ${shippedVersion} (vendored by ${spec.vendoredBy}, chunk: ${markerFiles.join(', ')})`,
       );
     }
 
