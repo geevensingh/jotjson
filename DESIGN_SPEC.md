@@ -1243,6 +1243,24 @@ enforcement and the field together in the same PR, or not at all.
   - `Permissions-Policy: clipboard-read=(self), clipboard-write=(self)` - scopes the Clipboard API to the site's own origin so the Smart Paste polling (Home page §1) can read the clipboard without cross-origin leakage.
   - **Content Security Policy** - the full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader, a SHA-256 hash for the inline splash script, plus `'unsafe-hashes'` and a SHA-256 hash for the inline `onload="this.media='all'"` event handler Angular's `optimization.styles.inlineCritical` build pass injects into prerendered HTML for deferred-print-CSS preloading; `script-src-attr` is intentionally omitted so legacy browsers fall back to `script-src`'s hash list per CSP3), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights (`*.in.applicationinsights.azure.com` ingestion, `*.livediagnostics.monitor.azure.com` live metrics, `js.monitor.azure.com` SDK runtime config CDN), `font-src 'self' data:` (the `data:` source is required because Monaco's `vs/editor/editor.main.css` ships its codicon icon font inline as a `data:font/ttf;base64,...` URL inside an `@font-face` block), plus `frame-ancestors 'self'` (matches `X-Frame-Options: SAMEORIGIN` so MSAL silent refresh continues to work), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights hosts - including the SDK config CDN - are still covered by the policy). The `--src` and `--dist` modes additionally assert the structural shape of the policy itself: that `'unsafe-hashes'` and the inline-handler hash are still present on `script-src`, that `script-src-attr` has not been re-added, that `font-src` still carries `data:`, and that `frame-src` and `frame-ancestors` both still carry `'self'` (required for the MSAL silent-refresh iframe's 302 redirect-back from the IdP to the SPA's own origin; sibling to `X-Frame-Options: SAMEORIGIN`) - so a future contributor cannot quietly drop one of these tokens and ship a broken policy. The deployed-headers e2e spec at `e2e/preview/security-headers.spec.ts` additionally parses the actually-served CSP value and asserts the same `frame-src 'self'` / `frame-ancestors 'self'` invariants survive the SWA / Azure Front Door / CDN delivery path. The `--dist` mode hashes all three production HTML files (`index.html`, `404/index.html`, `shell.html` - the SPA navigation fallback served on every non-prerendered route) and detects stale (unused) hashes in `script-src` so the policy does not bit-rot. See "CSP allowlist" further down for the App Insights origin rationale. See the PWA section for the post-deploy noise behavior that installed service workers can exhibit after a CSP-only deploy (tracked in issue #167). Sibling gate: `scripts/check-swa-config.mjs` covers the non-CSP globalHeaders entries above, the navigation-fallback rewrite, the route-order shadowing class, the deployment Cache-Control rule groups, `platform.apiRuntime`, and the `.webmanifest` MIME type.
 
+- **Dependency overrides must not misreport what ships.** An `overrides`
+  entry in `package.json` may never be used to change the *reported* version
+  of a package that ships vendored inside a prebuilt asset. Such a pin
+  changes only `node_modules/`, so bumping it closes Dependabot alerts
+  without altering a single shipped byte - and can additionally hide
+  advisories that affect the older shipped copy. The only real remediation
+  is to bump the vendoring package. Every root override must be classified
+  (`dev-only` / `prod-graph` / `shipped-prebuilt`) and justified with a named
+  consumer. `scripts/check-dependency-overrides.mjs` (lint chain) enforces
+  both halves: it validates the classification table and, for
+  `shipped-prebuilt` entries, reads the version out of the bytes
+  `angular.json` actually copies and asserts no override contradicts it. The
+  motivating case - DOMPurify 3.2.7 vendored inside `monaco-editor`'s
+  `min/vs` while an override claimed 3.4.1, suppressing eight true
+  advisories - plus the full overrides audit, the reachability assessment,
+  and the preferred end-state are documented in `docs/supply-chain.md`
+  (issue #514).
+
 ### Scalability
 - Cosmos DB serverless scales automatically.
 - Azure Functions consumption plan scales to zero when idle.
