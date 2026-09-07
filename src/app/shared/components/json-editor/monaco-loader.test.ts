@@ -335,6 +335,56 @@ describe('monaco-loader', () => {
     expect(captured.length).toBe(0);
   });
 
+  it('ignores a late load on an adopted foreign script once it has settled', async () => {
+    const captured = interceptLoaderInjection();
+    const placeholder = insertPlaceholderLoaderScript();
+
+    const pending = silenced(loadMonaco());
+    // First settle wins. `reject()` is idempotent, so what matters is
+    // that the late `load` below cannot still run `bootstrap()` and
+    // populate `window.monaco` after the caller was told it failed.
+    placeholder.dispatchEvent(new Event('error'));
+    await expect(pending).rejects.toThrow('Failed to load Monaco AMD loader');
+
+    let bootstrapped = false;
+    window.require = makeAmdRequire(() => {
+      bootstrapped = true;
+      window.monaco = fakeMonaco;
+    });
+    placeholder.dispatchEvent(new Event('load'));
+
+    expect(bootstrapped).toBe(false);
+    expect(window.monaco).toBeUndefined();
+    expect(captured.length).toBe(0);
+  });
+
+  it('stops listening to an adopted foreign script after the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const captured = interceptLoaderInjection();
+      const placeholder = insertPlaceholderLoaderScript();
+
+      const pending = silenced(loadMonaco());
+      // Comfortably past the loader's foreign-script timeout without
+      // coupling this spec to the exact constant.
+      await vi.advanceTimersByTimeAsync(120_000);
+      await expect(pending).rejects.toThrow(/did not initialize within/);
+
+      let bootstrapped = false;
+      window.require = makeAmdRequire(() => {
+        bootstrapped = true;
+        window.monaco = fakeMonaco;
+      });
+      placeholder.dispatchEvent(new Event('load'));
+
+      expect(bootstrapped).toBe(false);
+      expect(window.monaco).toBeUndefined();
+      expect(captured.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('leaves realm facts intact when the cache seam runs', async () => {
     const captured = interceptLoaderInjection();
     const pending = loadMonaco();

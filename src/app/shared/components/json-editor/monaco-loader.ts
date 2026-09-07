@@ -305,30 +305,43 @@ function adoptForeignScript(
   resolve: ResolveMonaco,
   reject: RejectMonaco,
 ): void {
-  const timeoutId = setTimeout(() => {
-    reject(
-      new Error(
-        `A Monaco AMD loader script was already present but did not initialize within ${FOREIGN_LOADER_TIMEOUT_MS}ms`,
-      ),
-    );
+  // Whichever of timeout / load / error happens first owns the outcome.
+  // Without this latch a `load` arriving after the timeout would still
+  // run `bootstrap()`, requiring `vs/editor/editor.main` and populating
+  // `window.monaco` long after the caller was told the load failed.
+  // `reject()` itself is idempotent, so it is the side effects - not
+  // the promise - that need guarding.
+  let settled = false;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const settleOnce = (settleAction: () => void): void => {
+    if (settled) return;
+    settled = true;
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    script.removeEventListener('load', handleLoad);
+    script.removeEventListener('error', handleError);
+    settleAction();
+  };
+
+  const handleLoad = (): void => {
+    settleOnce(() => settleAfterEvaluation(resolve, reject));
+  };
+  const handleError = (): void => {
+    settleOnce(() => reject(new Error(FETCH_FAILED_MESSAGE)));
+  };
+
+  timeoutId = setTimeout(() => {
+    settleOnce(() => {
+      reject(
+        new Error(
+          `A Monaco AMD loader script was already present but did not initialize within ${FOREIGN_LOADER_TIMEOUT_MS}ms`,
+        ),
+      );
+    });
   }, FOREIGN_LOADER_TIMEOUT_MS);
 
-  script.addEventListener(
-    'load',
-    () => {
-      clearTimeout(timeoutId);
-      settleAfterEvaluation(resolve, reject);
-    },
-    { once: true },
-  );
-  script.addEventListener(
-    'error',
-    () => {
-      clearTimeout(timeoutId);
-      reject(new Error(FETCH_FAILED_MESSAGE));
-    },
-    { once: true },
-  );
+  script.addEventListener('load', handleLoad);
+  script.addEventListener('error', handleError);
 }
 
 function settleAfterEvaluation(resolve: ResolveMonaco, reject: RejectMonaco): void {
