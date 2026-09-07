@@ -112,6 +112,12 @@ export const VENDORED_PACKAGES = [
     // version. Also doubles as a presence assertion -- zero matching files
     // means Monaco stopped vendoring DOMPurify (or moved it out of the tree
     // we copy), which invalidates every other assumption here.
+    //
+    // This marker survives minification. Monaco 0.56.0 strips the `@license`
+    // banner COMMENT from min/vs, but the word DOMPurify remains in a Trusted
+    // Types error string ("...must not call DOMPurify.sanitize, as that causes
+    // infinite recursion..."), so the pre-filter still finds the chunk.
+    // Verified against the published 0.55.1 and 0.56.0 tarballs.
     marker: 'DOMPurify',
     versionPatterns: [
       /@license\s+DOMPurify\s+(\d+\.\d+\.\d+)/g,
@@ -393,11 +399,20 @@ function* walkFiles(root) {
 /**
  * Scans a shipped asset tree for the vendored package's version.
  *
+ * Two-stage by design: a cheap byte-level `marker` pre-filter identifies the
+ * chunk, then `versionPatterns` extract the version from it. The marker is a
+ * PACKAGE-IDENTITY assertion -- it answers "is this the DOMPurify chunk?" --
+ * which is why it stays `DOMPurify` rather than something like `version="`.
+ * A generic marker could match an unrelated chunk that happens to carry a
+ * version literal and silently report the wrong package's version.
+ *
+ * Exported for unit testing.
+ *
  * @param {string} root
  * @param {{marker: string, versionPatterns: RegExp[]}} spec
  * @returns {{versions: Set<string>, markerFiles: string[]}}
  */
-function scanShippedTree(root, spec) {
+export function scanShippedTree(root, spec) {
   const markerBuffer = Buffer.from(spec.marker, 'utf8');
   const versions = new Set();
   const markerFiles = [];

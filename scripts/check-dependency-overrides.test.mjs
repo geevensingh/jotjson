@@ -5,9 +5,10 @@
 // guards `main()` behind an "invoked directly" check so importing it does
 // not trigger CLI side effects (filesystem scans, process.exit).
 //
-// Coverage focuses on the pure decision functions. The end-to-end scan of
-// the shipped Monaco tree is exercised by the real
-// `npm run lint:dependency-overrides` and is not unit-tested here.
+// Coverage focuses on the pure decision functions plus `scanShippedTree`
+// (which does filesystem IO against a temp tree). The full end-to-end
+// `main()` path against real node_modules is exercised by
+// `npm run lint:dependency-overrides`.
 //
 // Background: issue #514. An `overrides` pin for a package that ships
 // vendored inside a prebuilt asset changes only node_modules/, never the
@@ -15,6 +16,9 @@
 // anything, and can hide advisories affecting the older shipped copy.
 
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -26,6 +30,7 @@ import {
   isNonEmptyString,
   normalizeOverrides,
   normalizePackageKey,
+  scanShippedTree,
 } from './check-dependency-overrides.mjs';
 
 // ---------------------------------------------------------------------------
@@ -328,8 +333,13 @@ test('extractVersionsFromText reads the license banner (monaco 0.55.1 shape)', (
 });
 
 test('extractVersionsFromText reads a bare version literal (monaco 0.56.0 shape)', () => {
-  // 0.56.0's minifier strips the @license banner but keeps the literal.
-  const text = 'e.isSupported=typeof x=="function",e.version="3.4.8",e.removed=[]';
+  // 0.56.0's minifier strips the @license banner COMMENT, but the word
+  // DOMPurify survives in a Trusted Types error string, so the real chunk
+  // still satisfies scanShippedTree's marker pre-filter. The fixture keeps
+  // that word for fidelity with the actual artifact.
+  const text =
+    'throw new Error("...must not call DOMPurify.sanitize, as that causes infinite recursion");' +
+    'e.isSupported=typeof x=="function",e.version="3.4.8",e.removed=[]';
   assert.deepEqual([...extractVersionsFromText(text, patterns())], ['3.4.8']);
 });
 
@@ -355,6 +365,114 @@ test('extractVersionsFromText is deterministic across repeated calls', () => {
   const text = '/*! @license DOMPurify 3.2.7 */';
   assert.deepEqual([...extractVersionsFromText(text, shared)], ['3.2.7']);
   assert.deepEqual([...extractVersionsFromText(text, shared)], ['3.2.7']);
+});
+
+// ---------------------------------------------------------------------------
+// scanShippedTree -- the marker pre-filter + version extraction, end to end
+//
+// Previously untested: the pre-filter and the extraction were only exercised
+// together by the real `npm run lint:dependency-overrides`, so the coupling
+// between `marker` and `versionPatterns` had no direct coverage.
+// ---------------------------------------------------------------------------
+
+function withTempTree(files, run) {
+  const root = mkdtempSync(join(tmpdir(), 'check-deps-'));
+  try {
+    for (const [relativePath, contents] of Object.entries(files)) {
+      const full = join(root, relativePath);
+      mkdirSync(dirname(full), { recursive: true });
+      writeFileSync(full, contents, 'utf8');
+    }
+    return run(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const DOMPURIFY_SPEC = {
+  marker: 'DOMPurify',
+  versionPatterns: [
+    /@license\s+DOMPurify\s+(\d+\.\d+\.\d+)/g,
+    /\bversion\s*=\s*"(\d+\.\d+\.\d+)"/g,
+  ],
+};
+
+test('scanShippedTree finds the banner form (monaco 0.55.1 shape)', () => {
+  const result = withTempTree(
+    {
+      'editor.api-CalNCsUg.js': '/*! @license DOMPurify 3.2.7 | (c) Cure53 */ var a=1;',
+      'other-chunk.js': 'var unrelated=1;',
+    },
+    (root) => scanShippedTree(root, DOMPURIFY_SPEC),
+  );
+  assert.deepEqual([...result.versions], ['3.2.7']);
+  assert.deepEqual(result.markerFiles, ['editor.api-CalNCsUg.js']);
+});
+
+test('scanShippedTree finds the banner-stripped form (monaco 0.56.0 shape)', () => {
+  // The exact case the marker pre-filter must survive: no @license banner,
+  // but DOMPurify still present in a Trusted Types error string.
+  const result = withTempTree(
+    {
+      'editor-KLE6jdfb.js':
+        'throw $c("must not call DOMPurify.sanitize, as that causes infinite recursion");' +
+        'e.version="3.4.8",e.removed=[]',
+    },
+    (root) => scanShippedTree(root, DOMPURIFY_SPEC),
+  );
+  assert.deepEqual([...result.versions], ['3.4.8']);
+  assert.deepEqual(result.markerFiles, ['editor-KLE6jdfb.js']);
+});
+
+test('scanShippedTree ignores a version literal in a file without the marker', () => {
+  // The marker is a package-IDENTITY assertion. An unrelated chunk carrying a
+  // version literal must not be mistaken for the DOMPurify chunk.
+  const result = withTempTree({ 'unrelated-lib.js': 'exports.version="9.9.9";' }, (root) =>
+    scanShippedTree(root, DOMPURIFY_SPEC),
+  );
+  assert.equal(result.markerFiles.length, 0);
+  assert.equal(result.versions.size, 0);
+});
+
+test('scanShippedTree recurses into subdirectories', () => {
+  const result = withTempTree(
+    { 'assets/nested/editor.js': '/*! @license DOMPurify 3.2.7 */' },
+    (root) => scanShippedTree(root, DOMPURIFY_SPEC),
+  );
+  assert.deepEqual([...result.versions], ['3.2.7']);
+  assert.deepEqual(result.markerFiles, ['assets/nested/editor.js']);
+});
+
+test('scanShippedTree only reads .js files', () => {
+  const result = withTempTree({ 'editor.css': '/*! @license DOMPurify 3.2.7 */' }, (root) =>
+    scanShippedTree(root, DOMPURIFY_SPEC),
+  );
+  assert.equal(result.markerFiles.length, 0);
+});
+
+test('scanShippedTree surfaces disagreement across chunks as multiple versions', () => {
+  // main() treats size > 1 as ambiguous and fails closed rather than picking.
+  const result = withTempTree(
+    {
+      'a.js': '/*! @license DOMPurify 3.2.7 */',
+      'b.js': 'DOMPurify;e.version="3.4.8"',
+    },
+    (root) => scanShippedTree(root, DOMPURIFY_SPEC),
+  );
+  assert.deepEqual([...result.versions].sort(), ['3.2.7', '3.4.8']);
+  assert.equal(result.markerFiles.length, 2);
+});
+
+test('scanShippedTree reports the marker file even when no version is readable', () => {
+  // Distinguishes "vendoring disappeared" (no marker files) from "vendoring
+  // present but version unreadable" -- main() emits a different failure for
+  // each, so the distinction has to survive.
+  const result = withTempTree(
+    { 'editor.js': 'DOMPurify is here but carries no parseable version' },
+    (root) => scanShippedTree(root, DOMPURIFY_SPEC),
+  );
+  assert.deepEqual(result.markerFiles, ['editor.js']);
+  assert.equal(result.versions.size, 0);
 });
 
 // ---------------------------------------------------------------------------
