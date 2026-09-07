@@ -95,11 +95,6 @@ const LOADER_SCRIPT_SRC = '/vs/loader.js';
 const FOREIGN_LOADER_TIMEOUT_MS = 30_000;
 
 const FETCH_FAILED_MESSAGE = 'Failed to load Monaco AMD loader';
-const NO_REQUIRE_MESSAGE = 'Monaco AMD loader did not attach window.require';
-const ALREADY_EVALUATED_MESSAGE =
-  'Monaco AMD loader already evaluated in this realm but window.require is gone. ' +
-  'Re-evaluating vs/loader.js would throw a SyntaxError, so this load cannot be ' +
-  'retried; a clean realm needs a fresh document.';
 
 let monacoPromise: Promise<typeof MonacoNS> | undefined;
 let monacoPromiseOverride: Promise<typeof MonacoNS> | undefined;
@@ -108,17 +103,70 @@ type ResolveMonaco = (namespace: typeof MonacoNS) => void;
 type RejectMonaco = (reason: unknown) => void;
 
 /**
- * Returns `window.require` only when it actually looks like an AMD
- * loader. An unrelated global named `require` (a bundler shim, another
- * library) would otherwise be handed to {@link bootstrap}, which calls
- * `.config(...)` on it and would throw a `TypeError` or stall.
+ * Why `window.require` is unusable, kept distinct because the causes
+ * have different remedies and are not interchangeable:
+ *
+ * - `absent` does **not** prove a reset deleted it. Monaco's loader
+ *   skips its own initialization entirely when another `define.amd`
+ *   is already present, in which case it never installed a `require`
+ *   at all.
+ * - `notCallable` / `noConfig` mean some other global owns the name.
+ *   That may have shadowed Monaco's loader after the fact, or been
+ *   there first and stopped it initializing.
  */
-function readAmdRequire(): MonacoAmdRequire | undefined {
-  const candidate: unknown = window.require;
-  if (typeof candidate !== 'function') return undefined;
+type UnusableRequireReason = 'absent' | 'notCallable' | 'noConfig';
+
+type AmdRequireProbe =
+  | { readonly usable: true; readonly amdRequire: MonacoAmdRequire }
+  | { readonly usable: false; readonly reason: UnusableRequireReason };
+
+/**
+ * Inspects `window.require` once and reports either the usable AMD
+ * loader or why it is not one. An unrelated global named `require` (a
+ * bundler shim, another library) would otherwise be handed to
+ * {@link bootstrap}, which calls `.config(...)` on it and would throw
+ * a `TypeError` or stall.
+ *
+ * The observed value is returned with the verdict rather than re-read
+ * afterwards, so a caller can never act on a different `require` than
+ * the one that was validated.
+ */
+function probeAmdRequire(): AmdRequireProbe {
+  const candidate = window.require;
+  if (candidate === undefined || candidate === null) {
+    return { usable: false, reason: 'absent' };
+  }
+  if (typeof candidate !== 'function') {
+    return { usable: false, reason: 'notCallable' };
+  }
   const config: unknown = Reflect.get(candidate, 'config');
-  if (typeof config !== 'function') return undefined;
-  return window.require;
+  if (typeof config !== 'function') {
+    return { usable: false, reason: 'noConfig' };
+  }
+  return { usable: true, amdRequire: candidate };
+}
+
+function describeUnusableRequire(reason: UnusableRequireReason): string {
+  switch (reason) {
+    case 'absent':
+      return 'window.require is absent';
+    case 'notCallable':
+      return 'window.require is present but is not callable';
+    case 'noConfig':
+      return 'window.require is callable but exposes no config() function, so it is not an AMD loader';
+  }
+}
+
+function noUsableRequireMessage(reason: UnusableRequireReason): string {
+  return `Monaco AMD loader did not attach a usable window.require: ${describeUnusableRequire(reason)}`;
+}
+
+function alreadyEvaluatedMessage(reason: UnusableRequireReason): string {
+  return (
+    `Monaco AMD loader already evaluated in this realm, but ${describeUnusableRequire(reason)}. ` +
+    're-evaluating vs/loader.js would throw a SyntaxError, so this load cannot retry: ' +
+    'restore a compatible AMD require if one was retained, otherwise use a fresh document.'
+  );
 }
 
 function makeWorkerUrl(): string {
@@ -144,10 +192,14 @@ export function loadMonaco(): Promise<typeof MonacoNS> {
   if (monacoPromise) return monacoPromise;
 
   monacoPromise = new Promise<typeof MonacoNS>((resolve, reject) => {
-    // The loader owns `getWorkerUrl` and nothing else on this global, so
-    // merge rather than replace: a caller-installed `getWorker` (the
-    // browser-integration spec's no-op worker) must survive.
-    window.MonacoEnvironment = { ...window.MonacoEnvironment, getWorkerUrl: makeWorkerUrl };
+    // The loader owns `getWorkerUrl` and nothing else on this global,
+    // so mutate the existing object rather than replacing it: a caller
+    // that installed `getWorker` (the browser-integration spec's no-op
+    // worker) must keep both its key and its object identity, since it
+    // may still hold a reference for cleanup.
+    const environment = window.MonacoEnvironment ?? {};
+    environment.getWorkerUrl = makeWorkerUrl;
+    window.MonacoEnvironment = environment;
 
     const realmState = window.JJ_MONACO_LOADER_STATE;
     const existingScript =
@@ -157,16 +209,20 @@ export function loadMonaco(): Promise<typeof MonacoNS> {
 
     // 1. A loader we own is already live in this realm. Re-bootstrapping
     //    off it is always correct and is never a second evaluation.
-    const amdRequire = readAmdRequire();
-    if (amdRequire && (realmState || existingScript)) {
-      bootstrap(amdRequire, resolve, reject);
+    const probe = probeAmdRequire();
+    if (probe.usable && (realmState || existingScript)) {
+      bootstrap(probe.amdRequire, resolve, reject);
       return;
     }
 
     // 2. We injected the loader into this realm before. Whatever state
     //    it is in, injecting again is the one thing we must not do.
+    //    Reaching here with a realm state means the probe above failed,
+    //    so hand its verdict down rather than re-reading a global that
+    //    may since have changed.
     if (realmState) {
-      settleFromRealmState(realmState, resolve, reject);
+      const reason = probe.usable ? undefined : probe.reason;
+      settleFromRealmState(realmState, reason, resolve, reject);
       return;
     }
 
@@ -219,6 +275,7 @@ function injectLoaderScript(resolve: ResolveMonaco, reject: RejectMonaco): void 
 
 function settleFromRealmState(
   state: MonacoLoaderRealmState,
+  unusableRequireReason: UnusableRequireReason | undefined,
   resolve: ResolveMonaco,
   reject: RejectMonaco,
 ): void {
@@ -227,10 +284,12 @@ function settleFromRealmState(
     return;
   }
   if (state.status === 'evaluated') {
-    // Reached only when something removed `window.require` after the
-    // loader ran. Report it plainly instead of re-injecting, which
-    // would be a `SyntaxError`.
-    reject(new Error(ALREADY_EVALUATED_MESSAGE));
+    // The loader ran, but no usable AMD `require` is reachable now.
+    // That does not prove a reset deleted it: Monaco's loader also
+    // declines to initialize when another `define.amd` was already
+    // present. Either way, re-injecting would be a `SyntaxError`, so
+    // report the cause the caller observed.
+    reject(new Error(alreadyEvaluatedMessage(unusableRequireReason ?? 'absent')));
     return;
   }
   state.script.addEventListener('load', () => settleAfterEvaluation(resolve, reject), {
@@ -273,12 +332,12 @@ function adoptForeignScript(
 }
 
 function settleAfterEvaluation(resolve: ResolveMonaco, reject: RejectMonaco): void {
-  const amdRequire = readAmdRequire();
-  if (!amdRequire) {
-    reject(new Error(NO_REQUIRE_MESSAGE));
+  const probe = probeAmdRequire();
+  if (!probe.usable) {
+    reject(new Error(noUsableRequireMessage(probe.reason)));
     return;
   }
-  bootstrap(amdRequire, resolve, reject);
+  bootstrap(probe.amdRequire, resolve, reject);
 }
 
 function bootstrap(

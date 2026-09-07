@@ -180,7 +180,35 @@ describe('monaco-loader', () => {
     delete window.require;
     injection.script.remove();
 
-    await expect(silenced(loadMonaco())).rejects.toThrow(/already evaluated in this realm/);
+    await expect(silenced(loadMonaco())).rejects.toThrow(
+      /already evaluated in this realm, but window\.require is absent/,
+    );
+    expect(captured.length).toBe(1);
+  });
+
+  it('names a shadowing non-AMD require when the loader already evaluated here', async () => {
+    const captured = interceptLoaderInjection();
+
+    const first = loadMonaco();
+    const injection = onlyInjection(captured);
+    window.require = makeAmdRequire(() => {
+      window.monaco = fakeMonaco;
+    });
+    injection.script.dispatchEvent(new Event('load'));
+    await first;
+
+    // Distinct from the case above: `require` is present, so the
+    // diagnostic must not claim it is absent. "Absent" and "shadowed"
+    // have different remedies, and Monaco's loader also declines to
+    // initialize at all when another `define.amd` was already there -
+    // so neither state proves a reset happened.
+    __resetMonacoLoaderCacheForTesting();
+    delete window.monaco;
+    window.require = (() => undefined) as unknown as AmdRequire;
+
+    await expect(silenced(loadMonaco())).rejects.toThrow(
+      /already evaluated in this realm, but window\.require is callable but exposes no config\(\)/,
+    );
     expect(captured.length).toBe(1);
   });
 
@@ -240,7 +268,23 @@ describe('monaco-loader', () => {
     const pending = silenced(loadMonaco());
     placeholder.dispatchEvent(new Event('load'));
 
-    await expect(pending).rejects.toThrow('did not attach window.require');
+    // The diagnostic names which of the three failure shapes occurred,
+    // rather than claiming `require` was never attached.
+    await expect(pending).rejects.toThrow(
+      'did not attach a usable window.require: window.require is callable but exposes no config()',
+    );
+    expect(captured.length).toBe(0);
+  });
+
+  it('reports a non-callable require distinctly from an absent one', async () => {
+    const captured = interceptLoaderInjection();
+    const placeholder = insertPlaceholderLoaderScript();
+    window.require = 'not a function' as unknown as AmdRequire;
+
+    const pending = silenced(loadMonaco());
+    placeholder.dispatchEvent(new Event('load'));
+
+    await expect(pending).rejects.toThrow('window.require is present but is not callable');
     expect(captured.length).toBe(0);
   });
 
@@ -266,18 +310,21 @@ describe('monaco-loader', () => {
     expect(window.monaco).toBe(fakeMonaco);
   });
 
-  it('preserves a caller-installed MonacoEnvironment.getWorker', async () => {
+  it('preserves a caller-installed MonacoEnvironment object and its getWorker', async () => {
     const captured = interceptLoaderInjection();
     const callerGetWorker = vi.fn() as unknown as NonNullable<
       NonNullable<typeof window.MonacoEnvironment>['getWorker']
     >;
-    window.MonacoEnvironment = { getWorker: callerGetWorker };
+    const callerEnvironment = { getWorker: callerGetWorker };
+    window.MonacoEnvironment = callerEnvironment;
 
     const pending = loadMonaco();
 
-    // The loader owns `getWorkerUrl`; it must not clobber the whole
-    // object and strip a `getWorker` the caller installed (the browser
-    // integration spec's no-op worker depends on this).
+    // The loader owns `getWorkerUrl` and nothing else here, so it adds
+    // its key in place: a caller that kept a reference (the browser
+    // integration spec holds one to delete `getWorker` before revoking
+    // its blob URL) must still be looking at the live object.
+    expect(window.MonacoEnvironment).toBe(callerEnvironment);
     expect(window.MonacoEnvironment?.getWorker).toBe(callerGetWorker);
     expect(typeof window.MonacoEnvironment?.getWorkerUrl).toBe('function');
 
