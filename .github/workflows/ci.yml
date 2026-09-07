@@ -63,6 +63,20 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Lint - Lockfile metadata
+        # Runs BEFORE `npm ci` on purpose: it is dependency-free pure Node,
+        # and the whole point is to inspect the lockfile we are about to
+        # install from. Covers the two invariants `npm ci` does NOT enforce
+        # -- root `version` drift and `resolved`/`integrity` presence
+        # (issue #509) -- so unlike the full `lint:lockfile` gate it is not
+        # redundant with the `npm ci` step below.
+        #
+        # Scope note: this is a merge gate plus defense-in-depth ordering,
+        # not a guarantee that no unverified install runs anywhere. Other
+        # jobs still `npm ci` concurrently, and anyone able to edit the
+        # lockfile in a PR can also edit this workflow.
+        id: lint-lockfile-metadata
+        run: npm run lint:lockfile-metadata
       - run: npm ci
       - name: Install api/ dependencies (cross-workspace knip)
         # The web job's npm ci installs only the root workspace. knip runs
@@ -191,11 +205,11 @@ jobs:
         # Covers every lint gate above plus the Script tests and Perf
         # script tests phases. When a new gate is added, append its
         # outcome to the env block below and its emit row to the run
-        # script. The trailing "All N gates passed" line still uses a
-        # hand-maintained literal pending issue #429 (replace with a
-        # derived count) -- bump the literal too.
+        # script. The totals are derived from the emit calls themselves
+        # (issue #429), so adding a row needs no hand-maintained count.
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         env:
+          OUTCOME_LOCKFILE_METADATA: ${{ steps.lint-lockfile-metadata.outcome }}
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
           OUTCOME_TSC_SPEC: ${{ steps.lint-tsc-spec.outcome }}
           OUTCOME_TSC_PERF_L2: ${{ steps.lint-tsc-perf-l2.outcome }}
@@ -212,6 +226,8 @@ jobs:
           OUTCOME_TEST_PERF_SCRIPTS: ${{ steps.test-perf-scripts.outcome }}
         run: |
           fail=0
+          lint_total=0
+          test_total=0
           {
             echo "## Lint and script-test results"
             echo ""
@@ -219,6 +235,12 @@ jobs:
               local label="$1"
               local outcome="$2"
               local fix="$3"
+              local kind="${4:-lint}"
+              if [ "$kind" = "lint" ]; then
+                lint_total=$((lint_total + 1))
+              else
+                test_total=$((test_total + 1))
+              fi
               if [ "$outcome" = "success" ]; then
                 echo "- :white_check_mark: ${label}"
               elif [ "$outcome" = "failure" ]; then
@@ -228,6 +250,7 @@ jobs:
                 echo "- :grey_question: ${label} (${outcome})"
               fi
             }
+            emit "Lockfile metadata"        "$OUTCOME_LOCKFILE_METADATA" "npm run lint:lockfile-metadata - an entry is missing resolved/integrity; remove node_modules, delete the lockfile, then npm install --package-lock-only --ignore-scripts"
             emit "TypeScript (tsc)"        "$OUTCOME_TSC"          "fix the type error reported above"
             emit "TypeScript specs (tsc)"  "$OUTCOME_TSC_SPEC"     "fix the type error reported above"
             emit "TypeScript perf L2 (tsc)" "$OUTCOME_TSC_PERF_L2" "fix the type error reported above (tsconfig.perf-l2.json)"
@@ -240,13 +263,13 @@ jobs:
             emit "SW shape"                "$OUTCOME_SW_SHAPE"     "npm run lint:sw-shape - if src/sw.worker.ts changed intentionally, update EXPECTED_SW_SOURCE_SHA256 in scripts/check-sw-shape.mjs"
             emit "Unused code"             "$OUTCOME_UNUSED"       "npm run lint:unused - either remove the unused export/dep/file, add a workspace 'entry' pattern (for files reachable only via a runtime convention knip can't see, e.g. Playwright's testDir), or add the dep to knip.jsonc ignoreDependencies (or ignoreBinaries, for CLI tools invoked from scripts); every allowlist addition needs a rationale comment naming the specific (not generic) mechanism by which the dep/entry is used"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
-            emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
-            emit "Perf script tests"       "$OUTCOME_TEST_PERF_SCRIPTS" "npm run test:perf-scripts - then fix the failing assertion in perf/fixtures/*.test.mjs"
+            emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs" test
+            emit "Perf script tests"       "$OUTCOME_TEST_PERF_SCRIPTS" "npm run test:perf-scripts - then fix the failing assertion in perf/fixtures/*.test.mjs" test
             echo ""
             if [ "$fail" -eq 1 ]; then
               echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 13 gates passed (11 lint + script tests + perf script tests)."
+              echo "All $((lint_total + test_total)) gates passed (${lint_total} lint + ${test_total} script-test)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts
