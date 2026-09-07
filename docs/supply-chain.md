@@ -189,13 +189,22 @@ banner and the declared dependency.
 
 `.github/workflows/dependency-review.yml` runs
 `actions/dependency-review-action` with `fail-on-severity: moderate` on every
-PR to `main`. It reads the **lockfile diff**, so it reports advisories against
-whatever version the lockfile newly introduces.
+PR to `main`. It reports advisories for dependencies **added or changed in the
+PR diff** -- not for everything already in the tree. (Confirmed empirically:
+`main` carries many known-vulnerable transitive dependencies, and unrelated
+Dependabot PRs pass this check.)
 
-Making the lockfile honest therefore makes this check **red**, and it stays red
-for as long as the vendored copy is behind. That is the check working
-correctly: before issue #514 it was silently green because the lockfile
-claimed a version that never shipped.
+That has a specific consequence for a vendored dependency:
+
+- The PR that **changes** the vendored version goes red, because the new
+  version is "newly introduced" and its advisories are reported.
+- Once it merges, that version is part of the base lockfile, so subsequent
+  unrelated PRs are **green** again.
+
+So a red here is a one-time cost per version change, not a permanent
+condition. Issue #514's PR went red reporting 14 moderate advisories against
+`dompurify@3.2.7` -- the version that had been shipping all along behind a
+pin claiming 3.4.1.
 
 Do **not** make it green by:
 
@@ -203,17 +212,28 @@ Do **not** make it green by:
 - raising `fail-on-severity` above `moderate`.
 
 Both hide a true finding about the shipped artifact, which is the exact
-failure mode #514 exists to correct, and the severity change degrades the gate
-for every future PR rather than just this one. The check is **not** in
-`main`'s required-status-check list, so a red result does not block merge.
+failure mode #514 exists to correct, and the severity change would degrade
+the gate for every future PR rather than just the one in front of you. The
+check is not in `main`'s required-status-check list, so a red result does not
+block merge.
 
-Note that bumping the vendoring package does not necessarily clear it either.
-Monaco 0.56.0 moves the shipped DOMPurify from 3.2.7 to 3.4.8, clearing 14 of
-18 advisories -- but two of the four residuals
-(`GHSA-55q2-fjhq-7xh7`, `GHSA-cmwh-pvxp-8882`) are **medium**, so the check
-stays red until an upstream Monaco vendors `>= 3.4.13`. Treat a red Dependency
-Review on a vendored dependency as a standing, documented condition rather
-than something to be cleared.
+### Path to green
+
+1. **Bump the vendoring package.** Monaco 0.56.0 (#524) moves the shipped
+   DOMPurify from 3.2.7 to 3.4.8, clearing 14 of the 18. That PR will itself
+   go red on the 4 residuals -- two of which
+   (`GHSA-55q2-fjhq-7xh7`, `GHSA-cmwh-pvxp-8882`) are moderate -- and then go
+   quiet after merge.
+2. **Wait out the residual upstream.** Clearing the last four needs a
+   monaco-editor release vendoring `>= 3.4.13`; none exists as of
+   2026-08-31. Dependabot will open the bump PR when one lands, and
+   `check-dependency-overrides` prints the shipped version on every CI run,
+   so the change is visible rather than silent.
+3. **Remove the blind spot entirely.** See *Preferred end-state* below. While
+   Monaco ships as an opaque prebuilt asset, its vendored dependencies are
+   invisible to every SCA tool and can only be moved by upgrading Monaco
+   wholesale. That is the actual fix for the class; the steps above are the
+   fix for this instance.
 
 ---
 
