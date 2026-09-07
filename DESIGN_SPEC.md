@@ -1925,9 +1925,9 @@ ID test tenant.
 | Layer | In place? | Purpose |
 |---|---|---|
 | Static analysis | yes | TypeScript `tsc --noEmit`, ASCII gate, spec-pattern lint, `staticwebapp.config.json` validator (`check-swa-config.mjs`). |
-| Unit (frontend) | yes | Component / service / pipe / pure logic; Monaco and other browser globals are stubbed. Co-located `*.spec.ts`. |
+| Unit (frontend) | yes | Component / service / pipe / pure logic; Monaco and other browser globals are stubbed. Co-located `*.test.ts`. |
 | Unit (api) | yes | Azure Functions handlers and shared modules; Cosmos and Blob clients are mocked. |
-| Browser integration | yes | Real Monaco loaded once per suite via the project's loader. Verifies the loader, the asset path, and the editor's mount + value roundtrip with a real DOM. Lives alongside frontend unit specs but is named `*.integration.spec.ts`. |
+| Browser integration | yes | Real Monaco loaded once per suite via the project's loader. Verifies the loader, the asset path, and the editor's mount + value roundtrip with a real DOM. Lives alongside frontend unit specs but is named `*.integration.test.ts`. |
 | API integration | v1 gate (active) | Functions + shared modules against a CI-only real Cosmos DB free-tier account (1000 RU/s + 25 GB free forever; per-run unique database name; secret-presence check skips fork PRs). Catches partition-key, query-shape, and continuation-token mistakes that mocks cannot. The `vnext-preview` Linux emulator is rejected as a harness due to acknowledged flakiness. Tracked in issue #63. |
 | Smoke e2e (anonymous) | v1 gate (active) | Playwright on critical anonymous user flows in Chromium, per-PR. Catches MSAL redirect, router lazy-load, service-worker, and CSP regressions that unit + browser-integration cannot. Tracked in issue #64. |
 | Preview-env smoke | shadow (active) | Same anonymous smoke harness, but pointed at a per-PR SWA preview environment on the nonprod stack (`pr-<N>` on `swa-jotjson-nonprod`) via `PLAYWRIGHT_BASE_URL`. Catches deploy-pipeline regressions (SWA config drift, CSP, service worker, redirect rules) that the locally-served-from-`dist` anonymous smoke cannot. Driven by `.github/workflows/cd-preview.yml`; lives under shadow mode (`continue-on-error: true` on the `Run Playwright tests` **step** of the `e2e-preview` job, so a red smoke does not block the build-and-deploy job's success or the PR) for ~1 week from PR #210 merge, then flipped to required. Tracked in issue #93 (Phase 2) / #179. |
@@ -1947,6 +1947,42 @@ What this layer model deliberately does *not* claim:
 
 Layer names above are runner-neutral so this model survives runner migrations
 (see issue #47 - test-runner migration).
+
+### Irreversible realm mutations
+
+Some browser resources cannot be un-loaded once evaluated. Monaco's AMD
+loader is the current example: `vs/loader.js` is a classic script whose
+first statement is `const _amdLoaderGlobal = this`, so evaluating it a
+second time in the same realm is a hard `SyntaxError` (issue #513) -
+which also fires a spurious "did not attach window.require" rejection,
+because the HTML spec still dispatches `load` for a script whose
+evaluation threw. Deleting the globals it installed, removing its
+`<script>` element, or discarding a module-level cached promise does not
+undo the evaluation; it only makes the guards lie.
+
+The rules this repo follows for any such resource:
+
+- **The loader owns the invariant.** "Already evaluated in this realm"
+  is recorded at realm scope (on `window`), not in module state and not
+  in the DOM, so it survives module re-instantiation, test files
+  sharing a realm, and any test seam.
+- **Test seams reset only what is genuinely resettable.** The Monaco
+  seam (`__resetMonacoLoaderCacheForTesting`) clears the module's
+  memoized promise and nothing else. A test that installs a `window.*`
+  fake owns restoring it; a test that installs a loader override clears
+  it with `__setMonacoLoaderPromiseForTesting(undefined)`.
+- **Unit layers substitute, only browser integration evaluates.** Unit
+  specs that mount `<jj-json-editor>` pin a stub loader for the whole
+  file (`pinMinimalMonacoLoaderForFile`), because a per-test
+  `window.monaco` stub does not cover an async component lifecycle that
+  outlives its test. `json-editor.component.integration.test.ts` is the
+  only spec permitted to evaluate the real loader.
+
+Vitest browser mode shares realms across test files in this repo's
+configuration, so cross-file leakage is a live concern rather than a
+theoretical one. A spec file that needs a particular loader state
+declares it on entry rather than trusting the previous file to have
+cleaned up.
 
 ### Static-shape vs runtime invariants: a placement rubric
 
