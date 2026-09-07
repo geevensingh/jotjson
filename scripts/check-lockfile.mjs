@@ -181,11 +181,34 @@ export function checkMetadataFields(lock) {
 /** Number of offending entries listed before truncating the report. */
 const MAX_REPORTED_OFFENDERS = 10;
 
+/**
+ * Prints the safe lockfile-regeneration recipe for a workspace.
+ *
+ * The lines are written to be pasted and run **in sequence from the repo
+ * root**. An earlier revision prefixed each line with `cd api; `, which only
+ * works for the first line: `cd` persists, so the second would try to enter
+ * `api/api` and fail. Root-relative paths plus `npm --prefix` avoid that, and
+ * match how the repo drives the api/ workspace elsewhere (CI runs
+ * `npm --prefix api ci`).
+ *
+ * Removing `node_modules` and passing `--ignore-scripts` are both
+ * load-bearing -- see the file header for why omitting either is what
+ * produced issue #509.
+ */
+function printRegenerationSteps(workspace) {
+  const nodeModules = workspace.prefix ? `${workspace.prefix}/node_modules` : 'node_modules';
+  const prefixArg = workspace.prefix ? `--prefix ${workspace.prefix} ` : '';
+  console.error(`    Remove-Item -Recurse -Force ${nodeModules}`);
+  console.error(`    Remove-Item ${workspace.lockfile}`);
+  console.error(`    npm ${prefixArg}install --package-lock-only --ignore-scripts`);
+  console.error(`    git add ${workspace.lockfile}`);
+}
+
 function printMetadataMessage(workspace, offenders) {
   console.error('');
   console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (missing metadata)`);
   console.error(
-    `  ${offenders.length} entr${offenders.length === 1 ? 'y' : 'ies'} lack the \`resolved\`/\`integrity\` that pin what npm downloads.`,
+    `  ${offenders.length} entr${offenders.length === 1 ? 'y' : 'ies'} lack${offenders.length === 1 ? 's' : ''} the \`resolved\`/\`integrity\` that pin what npm downloads.`,
   );
   const shown = offenders.slice(0, MAX_REPORTED_OFFENDERS);
   for (const offender of shown) {
@@ -196,12 +219,8 @@ function printMetadataMessage(workspace, offenders) {
   }
   console.error('  Common cause: regenerating the lockfile while `node_modules` was present,');
   console.error('  which makes npm rebuild entries from the on-disk tree (no metadata there).');
-  console.error('  Fix (order matters - `node_modules` MUST be absent):');
-  const cdHint = workspace.prefix ? `cd ${workspace.prefix}; ` : '';
-  console.error(`    ${cdHint}Remove-Item -Recurse -Force node_modules`);
-  console.error(`    ${cdHint}Remove-Item ${workspace.lockfile.split('/').pop()}`);
-  console.error(`    ${cdHint}npm install --package-lock-only --ignore-scripts`);
-  console.error(`    git add ${workspace.lockfile}`);
+  console.error('  Fix (order matters - `node_modules` MUST be absent), from the repo root:');
+  printRegenerationSteps(workspace);
 }
 
 /**
@@ -322,7 +341,6 @@ function runDryRun(NPM_CLI, workspace) {
 }
 
 function printDriftMessage(workspace) {
-  const cdHint = workspace.prefix ? `cd ${workspace.prefix}; ` : '';
   console.error('');
   console.error(`check-lockfile: FAILED for workspace '${workspace.name}'`);
   console.error('  Lockfile is out of sync with package.json. Common causes:');
@@ -330,10 +348,8 @@ function printDriftMessage(workspace) {
   console.error('      (forbidden by AGENTS.md without explicit user approval)');
   console.error('    - Hand-edited the lockfile');
   console.error('    - Bad merge of package*.json');
-  console.error('  Fix:');
-  console.error(`    ${cdHint}Remove-Item ${workspace.lockfile.split('/').pop()}`);
-  console.error(`    ${cdHint}npm install --package-lock-only`);
-  console.error(`    git add ${workspace.lockfile}`);
+  console.error('  Fix, from the repo root:');
+  printRegenerationSteps(workspace);
 }
 
 function printOtherFailureMessage(workspace, status) {
