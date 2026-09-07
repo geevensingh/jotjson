@@ -163,7 +163,8 @@ test('checkMetadataFields flags a missing resolved', () => {
   delete entry.resolved;
   const offenders = checkMetadataFields(lockWith({ 'node_modules/left-pad': entry }));
   assert.equal(offenders.length, 1);
-  assert.match(offenders[0].reason, /resolved/);
+  // `integrity` is still present, so only `resolved` is named.
+  assert.equal(offenders[0].reason, 'missing `resolved`');
 });
 
 test('checkMetadataFields flags the issue #509 shape (both fields absent)', () => {
@@ -179,6 +180,9 @@ test('checkMetadataFields flags the issue #509 shape (both fields absent)', () =
   const offenders = checkMetadataFields(lock);
   assert.equal(offenders.length, 1);
   assert.equal(offenders[0].path, 'node_modules/@algolia/abtesting');
+  // Naming only `resolved` here would send someone off to fix half the
+  // problem and re-run into the other half.
+  assert.equal(offenders[0].reason, 'missing `resolved` and `integrity`');
 });
 
 test('checkMetadataFields treats empty strings as missing', () => {
@@ -192,8 +196,8 @@ test('checkMetadataFields treats empty strings as missing', () => {
   });
   const offenders = checkMetadataFields(lock);
   assert.equal(offenders.length, 2);
-  assert.match(offenders[0].reason, /resolved/);
-  assert.match(offenders[1].reason, /integrity/);
+  assert.equal(offenders[0].reason, 'missing `resolved` and `integrity`');
+  assert.equal(offenders[1].reason, 'missing `integrity`');
 });
 
 test('checkMetadataFields exempts link entries (symlink, no tarball)', () => {

@@ -153,8 +153,15 @@ export function checkMetadataFields(lock) {
     if (record['link'] === true || record['inBundle'] === true) continue;
 
     const resolved = record['resolved'];
+    const hasIntegrity = nonEmptyString(record['integrity']);
     if (!nonEmptyString(resolved)) {
-      offenders.push({ path, reason: 'missing `resolved`' });
+      // Report both fields when both are gone -- that is the issue #509
+      // shape, and naming only `resolved` would send someone off to fix
+      // half the problem and re-run into the other half.
+      offenders.push({
+        path,
+        reason: hasIntegrity ? 'missing `resolved`' : 'missing `resolved` and `integrity`',
+      });
       continue;
     }
 
@@ -170,7 +177,7 @@ export function checkMetadataFields(lock) {
       continue;
     }
 
-    if (!nonEmptyString(record['integrity'])) {
+    if (!hasIntegrity) {
       offenders.push({ path, reason: 'missing `integrity`' });
     }
   }
