@@ -150,7 +150,7 @@ count for what ships.
 ### The fix
 
 The override was removed, not bumped. npm now resolves the edge from
-Monaco's own declaration:
+Monaco's own declaration. Immediately after that PR:
 
 ```
 $ npm ls dompurify --all
@@ -161,6 +161,16 @@ jotjson@1.4.0
 
 The reported version now equals the vendored version, so Dependabot
 describes the artifact users actually download.
+
+Issue #524 then did the follow-on work of actually moving those bytes,
+bumping `monaco-editor` to 0.56.0. The current state is:
+
+```
+$ npm ls dompurify --all
+jotjson@1.4.0
+`-- monaco-editor@0.56.0
+    `-- dompurify@3.4.8
+```
 
 ### How to re-verify by hand
 
@@ -182,6 +192,13 @@ Note that Monaco's minifier **stripped the `@license` banner as of 0.56.0**,
 but a `version="x.y.z"` literal survives in both 0.55.1 and 0.56.0. The gate
 reads the literal from the shipped tree and cross-checks it against the ESM
 banner and the declared dependency.
+
+On the currently-shipped 0.56.0 the gate prints:
+
+```
+check-dependency-overrides: dompurify: shipped 3.4.8 (vendored by monaco-editor@0.56.0, chunk: editor-KLE6jdfb.js)
+check-dependency-overrides: OK (3 override(s) classified, 1 vendored package(s) verified)
+```
 
 ---
 
@@ -219,10 +236,10 @@ block merge.
 
 ### Path to green
 
-1. **Bump the vendoring package.** Monaco 0.56.0 (#524) moves the shipped
-   DOMPurify from 3.2.7 to 3.4.8, clearing 14 of the 18. That PR will itself
-   go red on the 4 residuals -- two of which
-   (`GHSA-55q2-fjhq-7xh7`, `GHSA-cmwh-pvxp-8882`) are moderate -- and then go
+1. **Bump the vendoring package. (Done - issue #524.)** Monaco 0.56.0 moved
+   the shipped DOMPurify from 3.2.7 to 3.4.8, clearing 14 of the 18. That PR
+   itself went red on the 4 residuals -- two of which
+   (`GHSA-55q2-fjhq-7xh7`, `GHSA-cmwh-pvxp-8882`) are moderate -- and then went
    quiet after merge.
 2. **Wait out the residual upstream.** Clearing the last four needs a
    monaco-editor release vendoring `>= 3.4.13`; none exists as of
@@ -243,12 +260,15 @@ Establishes whether the advisories affecting the shipped DOMPurify are
 actually exploitable here, so remediation urgency is a judgement about
 JotJSON rather than about a version number.
 
-**Conclusion: none of the 18 advisories affecting the shipped 3.2.7 appear
-reachable through Monaco's usage in JotJSON.** Every one requires a
-DOMPurify configuration option, a persistent-config API, an allowlist-
-mutating hook, or an application-side re-parse that Monaco does not use.
-The Monaco bump remains worthwhile as defense in depth, but is **not
-urgent**.
+**Conclusion: none of the advisories affecting the shipped DOMPurify appear
+reachable through Monaco's usage in JotJSON.** This was first derived against
+the 18 advisories covering 3.2.7 and still holds for the **4 residuals**
+covering the currently-shipped 3.4.8 (`GHSA-55q2-fjhq-7xh7`,
+`GHSA-c2j3-45gr-mqc4`, `GHSA-cmwh-pvxp-8882`, `GHSA-vxr8-fq34-vvx9` - see
+Table B). Every one requires a DOMPurify configuration option, a
+persistent-config API, an allowlist-mutating hook, or an application-side
+re-parse that Monaco does not use. The Monaco bump was worthwhile as defense
+in depth, but was **not urgent**.
 
 ### How Monaco calls DOMPurify
 
@@ -292,6 +312,12 @@ Note that `modeConfiguration.hovers` is left at its default (enabled):
 
 Content escaping alone cannot dismiss these; each turns on an API or option.
 
+All 18 advisories that affected the previously-shipped 3.2.7 are listed, for
+the historical record. The **first four rows** (patched 3.4.13 / 3.4.12 /
+3.4.11 / 3.4.9) are the ones still affecting the currently-shipped **3.4.8**;
+every row from `GHSA-gvmj-g25r-r7wr` down is patched at `<= 3.4.8` and is
+therefore already cleared by what ships today.
+
 | GHSA | Patched | Precondition | Monaco? | Reachable |
 | --- | --- | --- | --- | --- |
 | `GHSA-55q2-fjhq-7xh7` | 3.4.13 | `IN_PLACE` + element-removing hook | Never uses `IN_PLACE` | No |
@@ -315,7 +341,8 @@ Content escaping alone cannot dismiss these; each turns on an API or option.
 
 ### Caveats
 
-This assessment describes Monaco's usage **as of 0.55.1 / 0.56.0**. It is
+This assessment describes Monaco's usage **as of 0.56.0** (the shipped
+version), and was verified identical in its predecessor 0.55.1. It is
 not a guarantee:
 
 - Upstream can change `domSanitize.js` in any release without notice, so the
@@ -323,9 +350,10 @@ not a guarantee:
 - It covers Monaco's DOMPurify usage, not a proof that no other shipped code
   calls `sanitize()` differently. `domSanitize.js` is the only importer
   today.
-- "Not reachable" is not "not worth fixing". Running a sanitizer with 18
-  known bypasses relies on preconditions staying false, which is a fragile
-  property to depend on.
+- "Not reachable" is not "not worth fixing". Running a sanitizer with known
+  bypasses (4 against the shipped 3.4.8; 18 against the previously-shipped
+  3.2.7) relies on preconditions staying false, which is a fragile property
+  to depend on.
 
 ---
 

@@ -102,7 +102,9 @@ describe('JsonEditorComponent (browser integration)', () => {
     // loader, so it must not inherit unit-level loader state from a
     // spec file that shared this realm (issue #513): a pinned override
     // or a leaked `window.monaco` stub would both make `loadMonaco()`
-    // return a stub and skip initializing `window.MonacoEnvironment`.
+    // return a stub without ever evaluating `vs/editor/editor.main` -
+    // and it is that module, not `loadMonaco()`, which assigns
+    // `window.MonacoEnvironment` (issue #524).
     // The loader's realm state is deliberately NOT resettable -
     // re-injecting `/vs/loader.js` into a realm that already evaluated
     // it is a hard `SyntaxError`.
@@ -113,10 +115,12 @@ describe('JsonEditorComponent (browser integration)', () => {
   });
 
   afterAll(() => {
-    // Drop our worker hook BEFORE revoking its blob URL. `loadMonaco()`
-    // owns `getWorkerUrl` on this global and we only ever added
-    // `getWorker`; leaving a `getWorker` closure pointing at a revoked
-    // URL would hand the next editor mount in this realm a dead worker.
+    // Drop our worker hook BEFORE revoking its blob URL. The object we
+    // are mutating belongs to Monaco - `vs/editor/editor.main` assigns
+    // `self.MonacoEnvironment = { getWorker }` while it evaluates - and
+    // it stays live for the rest of the realm. Leaving a `getWorker`
+    // closure pointing at a revoked URL would hand the next editor
+    // mount in this realm a dead worker.
     if (window.MonacoEnvironment) {
       delete window.MonacoEnvironment.getWorker;
     }
@@ -133,27 +137,29 @@ describe('JsonEditorComponent (browser integration)', () => {
    * source of an intermittent CI-only NetworkError that disconnected
    * the Karma browser slot mid-suite (~63% per-attempt failure rate).
    *
-   * Monaco's documented Environment interface declares both
-   * `getWorker?(workerId, label): Worker | Promise<Worker>` and
-   * `getWorkerUrl?(workerId, label): string`, with `getWorker` taking
-   * precedence when set. `loadMonaco()` sets `getWorkerUrl`; this
-   * helper augments the same `MonacoEnvironment` object with a
-   * `getWorker` that returns a Worker driven by an inline blob URL
-   * containing only `self.onmessage = () => {};`. Monaco posts to it
-   * and never gets a response - which is fine because the integration
-   * spec only exercises loader resolution, editor mount, value
-   * mirroring, and a11y-options threading. None of those require
-   * worker round-trips, and JsonEditorComponent disables Monaco JSON
-   * diagnostics (json-editor.component.ts) so no language-service
-   * worker call is ever made.
+   * `window.MonacoEnvironment` is **Monaco's** object, not ours:
+   * `vs/editor/editor.main` runs `self.MonacoEnvironment = { getWorker }`
+   * while it evaluates, discarding whatever was there before. That is
+   * why this runs *after* `await loadMonaco()` - it overwrites Monaco's
+   * own `getWorker` with one that returns a Worker driven by an inline
+   * blob URL containing only `self.onmessage = () => {};`. Monaco posts
+   * to it and never gets a response, which is fine: this spec only
+   * exercises loader resolution, editor mount, value mirroring, and
+   * a11y-options threading. None of those require worker round-trips,
+   * and `JsonEditorComponent` disables Monaco JSON diagnostics
+   * (json-editor.component.ts) so no language-service worker call is
+   * ever made.
    *
    * The blob URL is created once per suite and revoked in `afterAll`.
-   * Per Monaco's runtime, calling `getWorker` is sufficient to suppress
-   * the fallback `getWorkerUrl` path.
+   *
+   * Consequence worth remembering: because the real worker fetch is
+   * suppressed here, this spec canNOT catch a broken worker asset
+   * path after a Monaco bump. That check lives in the manual /
+   * deployed-preview smoke instead (see issue #524).
    */
   function installNoopMonacoWorker(): void {
     if (!window.MonacoEnvironment) {
-      throw new Error('loadMonaco() did not initialize window.MonacoEnvironment');
+      throw new Error('vs/editor/editor.main did not assign window.MonacoEnvironment');
     }
     const blobUrl = URL.createObjectURL(
       new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' }),
@@ -349,9 +355,11 @@ describe('JsonEditorComponent (browser integration)', () => {
   // --------------------------------------------------------------------
   // The component's `defineThemes()` registers `jotjson-dark` and
   // `jotjson-light` with `rules` arrays mapping JSON token scopes to
-  // per-theme palette colors. Exact token names are pinned to Monaco
-  // 0.55.1's JSON tokenizer (`monaco-editor/esm/vs/language/json/
-  // tokenization.js`):
+  // per-theme palette colors. Exact token names are pinned to Monaco's
+  // JSON tokenizer, re-verified byte-for-byte at the 0.56.0 bump
+  // (issue #524). The source moved but the scope names did not:
+  //   0.55.1 `esm/vs/language/json/tokenization.js`
+  //   0.56.0 `esm/vs/languages/features/json/tokenization.js`
   //   - string.value.json  -> JSON string values
   //   - number.json        -> JSON numbers (NOT plain "number")
   //   - keyword.json       -> true / false / null
