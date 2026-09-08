@@ -36,7 +36,7 @@
     "perf:check-fresh": "node scripts/perf/check-fresh.mjs",
     "preperf:l1": "npm run perf:build",
     "verify:fast": "npm run lint && npm run test:scripts && npm run build:info && vitest run",
-    "lint": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p tsconfig.perf-l2.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs && node scripts/check-prod-patterns.mjs && node scripts/check-csp-hashes.mjs && node scripts/check-swa-config.mjs && node scripts/check-deploy-freshness-cli.mjs && node scripts/check-sw-shape.mjs && node scripts/check-deprecated-telemetry.mjs && node scripts/check-lockfile.mjs && knip && node scripts/perf/check-no-sentinel-ceilings.mjs && node scripts/check-tree-row-grid.mjs && prettier --check .",
+    "lint": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p tsconfig.perf-l2.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs && node scripts/check-prod-patterns.mjs && node scripts/check-csp-hashes.mjs && node scripts/check-swa-config.mjs && node scripts/check-deploy-freshness-cli.mjs && node scripts/check-sw-shape.mjs && node scripts/check-deprecated-telemetry.mjs && node scripts/check-lockfile.mjs && node scripts/check-dependency-overrides.mjs && knip && node scripts/perf/check-no-sentinel-ceilings.mjs && node scripts/check-tree-row-grid.mjs && prettier --check .",
     "lint:tsc": "tsc --pretty false --noEmit -p tsconfig.app.json",
     "lint:tsc-spec": "tsc --pretty false --noEmit -p tsconfig.spec.json",
     "lint:tsc-perf-l2": "tsc --pretty false --noEmit -p tsconfig.perf-l2.json",
@@ -51,6 +51,8 @@
     "lint:sw-shape": "node scripts/check-sw-shape.mjs",
     "lint:deprecated-telemetry": "node scripts/check-deprecated-telemetry.mjs",
     "lint:lockfile": "node scripts/check-lockfile.mjs",
+    "lint:dependency-overrides": "node scripts/check-dependency-overrides.mjs",
+    "lint:lockfile-metadata": "node scripts/check-lockfile.mjs --metadata-only",
     "lint:unused": "knip",
     "lint:no-sentinel-ceilings": "node scripts/perf/check-no-sentinel-ceilings.mjs",
     "lint:format": "node scripts/check-format.mjs",
@@ -122,7 +124,6 @@
   },
   "overrides": {
     "@babel/plugin-transform-modules-systemjs": "^7.29.4",
-    "dompurify": "3.4.1",
     "fast-uri": "^3.1.2",
     "hono": "^4.12.16"
   }

@@ -633,6 +633,15 @@ for the iteration loop.
   100-blob cap, etc.). Enforce on both client and server.
 - Sanitize any user-provided strings rendered as HTML. Prefer Angular's default
   interpolation/binding over `innerHTML`.
+- **Never "fix" a Dependabot alert by bumping an `overrides` pin** without
+  first confirming the pin controls what actually ships. If the package
+  ships vendored inside a prebuilt asset (e.g. DOMPurify inside
+  `monaco-editor`'s `min/vs`, which `angular.json` copies to `/vs`), an
+  override changes only `node_modules/` -- it closes the alert while
+  changing zero shipped bytes, and can hide advisories affecting the older
+  shipped copy. Bump the vendoring package instead. Every root override must
+  be classified and justified in `scripts/check-dependency-overrides.mjs`;
+  see `docs/supply-chain.md` and issue #514.
 - All API routes that mutate or read user data require a valid Entra External ID
   token except
   the explicitly-public blob read path.
@@ -685,7 +694,8 @@ Before finishing a task:
    `tsc --noEmit -p tsconfig.app.json` + `tsc --noEmit -p tsconfig.spec.json`
    + `check-ascii.mjs`,
    `check-spec-patterns.mjs`, `check-prod-patterns.mjs`,
-   `check-lockfile.mjs`, and `check-format.mjs` (the prettier
+   `check-lockfile.mjs`, `check-dependency-overrides.mjs`, and
+   `check-format.mjs` (the prettier
    annotation wrapper - `npm run format:check` is the equivalent for
    direct invocation).
    Formatting is enforced repo-wide, including `api/**`, from the
@@ -696,12 +706,19 @@ Before finishing a task:
    summary: `npm run lint:tsc`, `npm run lint:tsc-spec`,
    `npm run lint:ascii`,
    `npm run lint:spec-patterns`, `npm run lint:prod-patterns`,
-   `npm run lint:format`. (The `lint:lockfile` gate is
-   intentionally **not** a separate CI step: CI's job-level
-   `npm ci` already enforces lockfile-vs-manifest sync natively, so
-   a duplicate CI step would never fire. The script exists as a
-   `lint:*` entry point so it shows up in `lint:all` and can be
-   invoked directly during local debugging.) **When CI fails, look
+   `npm run lint:dependency-overrides`,
+   `npm run lint:format`. (The full `lint:lockfile` gate is
+   intentionally **not** a separate CI step: its slow phase runs
+   `npm ci --dry-run`, and CI's job-level `npm ci` already enforces
+   lockfile-vs-manifest sync natively, so that half would never
+   fire. Its **fast** phase is a different matter - root `version`
+   drift and `resolved`/`integrity` presence are invariants `npm ci`
+   does **not** check - so that half runs in CI on its own as
+   `npm run lint:lockfile-metadata`, placed *before* `npm ci`
+   because it needs no dependencies and its whole job is to inspect
+   the lockfile about to be installed from. Locally, `lint` runs the
+   full gate once and does not re-run the fast phase separately.)
+   **When CI fails, look
    at the failing step's name in the run page** - the gate that
    broke is named directly (e.g., "Lint - Prettier formatting").
    The "Lint summary" rollup step at the end of the job restates
@@ -769,12 +786,49 @@ Before finishing a task:
     - committing the matching flag in `.npmrc` at the workspace root
       (so subsequent `npm ci` runs use the same resolution), or
     - regenerating the lockfile afterward with the override removed
-      (`Remove-Item package-lock.json; npm install --package-lock-only`)
-      so the committed lockfile is valid under default settings.
+      (see the safe recipe in rule 13) so the committed lockfile is
+      valid under default settings.
 
-    Either way, `npm run lint:lockfile` (which runs `npm ci --dry-run`
-    against root and `api/`) must pass before commit. The `lint`
-    chain runs it automatically, so this is enforced by `lint:all`.
+    Either way, `npm run lint:lockfile` (which runs the metadata checks
+    plus `npm ci --dry-run` against root and `api/`) must pass before
+    commit. The `lint` chain runs it automatically, so this is enforced
+    by `lint:all`.
+13. **Regenerating a lockfile: `node_modules` MUST be absent, and always
+    pass `--ignore-scripts`.**
+
+    ```
+    Remove-Item -Recurse -Force node_modules
+    Remove-Item package-lock.json
+    npm install --package-lock-only --ignore-scripts
+    ```
+
+    Both details are load-bearing, and getting them wrong is what
+    caused issue #509 (742 of 1140 root entries silently lost their
+    `resolved`/`integrity`):
+
+    - **`node_modules` absent.** npm takes `resolved`/`integrity` from
+      registry packuments. With no lockfile to read, Arborist falls
+      back to building the tree from whatever is on disk in
+      `node_modules` - and npm >= 7 no longer records `_resolved` /
+      `_integrity` in installed `package.json` files, so every entry it
+      derives that way is written back **stripped of both fields**.
+      Nothing repairs this later: the code path that re-fetches missing
+      metadata only fires for `lockfileVersion < 2`, and ours is 3. The
+      damage is silent and permanent until someone notices.
+    - **`--ignore-scripts`.** The root `prepare` script runs `husky`,
+      which does not exist when `node_modules` has just been deleted,
+      so the command fails partway without it.
+
+    A lockfile in this state still passes `npm ci --dry-run` - the
+    dependency tree is perfectly consistent - so the tree-sync gate
+    cannot catch it. `npm run lint:lockfile-metadata` is the gate that
+    can, and CI runs it before `npm ci`.
+
+    Prefer a targeted repair over a full regeneration when you only
+    need to restore metadata: regenerating re-resolves every range and
+    will float transitive (and sometimes direct) versions, turning a
+    metadata fix into an unreviewed dependency bump. Dependency
+    upgrades belong to Dependabot.
 
 ## 8. Git & PR Hygiene
 
