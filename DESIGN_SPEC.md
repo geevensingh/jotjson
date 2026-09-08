@@ -3647,7 +3647,7 @@ Out of scope (for v1):
   http-proxy-middleware 3.0.7, shell-quote 1.10.0. Bumped **patch**
   rather than "no bump" because `@angular/core` / `common` / `compiler`
   are shipped runtime code, so the sanitization fixes are a user-visible
-  bug fix under s Versioning; the `deps` no-bump carve-out is read as
+  bug fix under the Versioning section; the `deps` no-bump carve-out is read as
   covering dev/tooling dependencies. No source changes.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
