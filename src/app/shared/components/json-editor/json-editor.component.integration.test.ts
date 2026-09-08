@@ -153,7 +153,7 @@ describe('JsonEditorComponent (browser integration)', () => {
    * The blob URL is created once per suite and revoked in `afterAll`.
    *
    * Consequence worth remembering: because the real worker fetch is
-   * suppressed here, this spec canNOT catch a broken worker asset
+   * suppressed here, this spec cannot catch a broken worker asset
    * path after a Monaco bump. That check lives in the manual /
    * deployed-preview smoke instead (see issue #524).
    */
