@@ -167,10 +167,15 @@ bumping `monaco-editor` to 0.56.0. The current state is:
 
 ```
 $ npm ls dompurify --all
-jotjson@1.4.0
+jotjson@<version>
 `-- monaco-editor@0.56.0
     `-- dompurify@3.4.8
 ```
+
+The root version is elided here on purpose: it drifts with every SemVer
+bump and says nothing about the dompurify edge this section is about. The
+0.55.1 snippet above keeps its literal `1.4.0` because it is a dated
+record of the state right after #514, not a claim about today.
 
 ### How to re-verify by hand
 
