@@ -3620,6 +3620,35 @@ Out of scope (for v1):
   click reach into the legacy `<input type="file">` fallback to size a
   future download-on-save fallback). DESIGN_SPEC s "Local file editing"
   subsection extended with a "Write-back (1.4.0)" block.
+- **1.4.1**: Angular security patch - all `@angular/*` and
+  `@angular-devkit/*` packages bumped to 21.2.22 in lockstep. Clears ten
+  open Dependabot alerts (nine high, one medium, all runtime scope)
+  covering nine unique CVEs: CVE-2026-50555 / CVE-2026-50556 /
+  CVE-2026-69149 (`platform-server`), CVE-2026-54266 / CVE-2026-54268 /
+  CVE-2026-68945 (`common`), CVE-2026-54267 (`core`), CVE-2026-54265
+  (`compiler`), and CVE-2026-69151 (`core` + `compiler`, hence ten alerts
+  from nine CVEs). Mostly XSS - i18n event-handler attributes, SSR
+  raw-content escaping, two-way-binding sanitization bypass - plus
+  HttpTransferCache cross-request poisoning and a `formatDate` OOM DoS.
+  The last two have no live exposure surface here (no
+  `provideClientHydration` / `TransferState`; Angular's `formatDate` is
+  unused in favor of the repo's own `formatDateAnnotation`), but the fix
+  is taken regardless. All 13 packages had to move together: the
+  framework peer-locks with **exact** pins (`@angular/core@21.2.22` peers
+  `@angular/compiler@"21.2.22"`), which is why the four single-package
+  Dependabot PRs (#468-#471) were unmergeable at install and each
+  targeted below the 21.2.19 fix floor. `typescript` stays `~5.9.3` (it
+  already satisfies every 21.2.22 peer) and `@angular/cdk` /
+  `@angular/material` stay at 21.2.12 - they ride a separate release
+  cadence, peer `@angular/core` on a caret range, and carry no alerts.
+  Forced transitives moved with the train and incidentally cleared
+  several dev-scope alerts: postcss 8.5.23, undici 7.29.0, piscina 5.2.0,
+  esbuild-wasm 0.28.1, webpack-dev-server 5.2.6,
+  http-proxy-middleware 3.0.7, shell-quote 1.10.0. Bumped **patch**
+  rather than "no bump" because `@angular/core` / `common` / `compiler`
+  are shipped runtime code, so the sanitization fixes are a user-visible
+  bug fix under s Versioning; the `deps` no-bump carve-out is read as
+  covering dev/tooling dependencies. No source changes.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
