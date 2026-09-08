@@ -633,6 +633,15 @@ for the iteration loop.
   100-blob cap, etc.). Enforce on both client and server.
 - Sanitize any user-provided strings rendered as HTML. Prefer Angular's default
   interpolation/binding over `innerHTML`.
+- **Never "fix" a Dependabot alert by bumping an `overrides` pin** without
+  first confirming the pin controls what actually ships. If the package
+  ships vendored inside a prebuilt asset (e.g. DOMPurify inside
+  `monaco-editor`'s `min/vs`, which `angular.json` copies to `/vs`), an
+  override changes only `node_modules/` -- it closes the alert while
+  changing zero shipped bytes, and can hide advisories affecting the older
+  shipped copy. Bump the vendoring package instead. Every root override must
+  be classified and justified in `scripts/check-dependency-overrides.mjs`;
+  see `docs/supply-chain.md` and issue #514.
 - All API routes that mutate or read user data require a valid Entra External ID
   token except
   the explicitly-public blob read path.
@@ -685,7 +694,8 @@ Before finishing a task:
    `tsc --noEmit -p tsconfig.app.json` + `tsc --noEmit -p tsconfig.spec.json`
    + `check-ascii.mjs`,
    `check-spec-patterns.mjs`, `check-prod-patterns.mjs`,
-   `check-lockfile.mjs`, and `check-format.mjs` (the prettier
+   `check-lockfile.mjs`, `check-dependency-overrides.mjs`, and
+   `check-format.mjs` (the prettier
    annotation wrapper - `npm run format:check` is the equivalent for
    direct invocation).
    Formatting is enforced repo-wide, including `api/**`, from the
@@ -696,6 +706,7 @@ Before finishing a task:
    summary: `npm run lint:tsc`, `npm run lint:tsc-spec`,
    `npm run lint:ascii`,
    `npm run lint:spec-patterns`, `npm run lint:prod-patterns`,
+   `npm run lint:dependency-overrides`,
    `npm run lint:format`. (The full `lint:lockfile` gate is
    intentionally **not** a separate CI step: its slow phase runs
    `npm ci --dry-run`, and CI's job-level `npm ci` already enforces
