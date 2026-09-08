@@ -13,9 +13,104 @@
 // unit-tested here.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-import { checkMetadataFields, checkVersionInSync } from './check-lockfile.mjs';
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+import {
+  checkMetadataFields,
+  checkPeerLockedFamilies,
+  checkVersionInSync,
+} from './check-lockfile.mjs';
+
+/**
+ * Builds a manifest + lockfile pair describing a healthy vitest family,
+ * so each test below can perturb exactly one thing.
+ */
+function vitestFixture(version = '4.1.11', range = '^4.1.11') {
+  const members = [
+    'vitest',
+    '@vitest/browser-playwright',
+    '@vitest/coverage-v8',
+    '@vitest/browser',
+  ];
+  const packages = { '': { version: '1.0.0' } };
+  for (const name of members) packages[`node_modules/${name}`] = { version };
+  return {
+    pkg: {
+      devDependencies: {
+        vitest: range,
+        '@vitest/browser-playwright': range,
+        '@vitest/coverage-v8': range,
+      },
+    },
+    lock: { packages },
+  };
+}
+
+test('checkPeerLockedFamilies passes on a healthy family', () => {
+  const { pkg, lock } = vitestFixture();
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
+});
+
+test('checkPeerLockedFamilies ignores workspaces it does not govern', () => {
+  const { pkg, lock } = vitestFixture();
+  pkg.devDependencies['@vitest/coverage-v8'] = '^4.1.7';
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'api/'), []);
+});
+
+test('checkPeerLockedFamilies flags divergent declared ranges', () => {
+  const { pkg, lock } = vitestFixture();
+  pkg.devDependencies['@vitest/coverage-v8'] = '^4.1.7';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /declared ranges diverge/);
+  assert.match(problems[0], /#533/);
+});
+
+test('checkPeerLockedFamilies flags a stale transitive follower', () => {
+  const { pkg, lock } = vitestFixture();
+  lock.packages['node_modules/@vitest/browser'].version = '4.1.7';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /resolved versions diverge/);
+  assert.match(problems[0], /@vitest\/browser@4\.1\.7/);
+});
+
+test('checkPeerLockedFamilies flags a nested duplicate copy', () => {
+  const { pkg, lock } = vitestFixture();
+  lock.packages['node_modules/vitest/node_modules/@vitest/browser'] = { version: '4.1.7' };
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /resolves to 2 copies/);
+});
+
+test('checkPeerLockedFamilies flags an undeclared family member', () => {
+  const { pkg, lock } = vitestFixture();
+  delete pkg.devDependencies['@vitest/coverage-v8'];
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.ok(problems.some((p) => /is not declared in package\.json/.test(p)));
+});
+
+test('checkPeerLockedFamilies flags a family member missing from the lockfile', () => {
+  const { pkg, lock } = vitestFixture();
+  delete lock.packages['node_modules/@vitest/browser'];
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.ok(problems.some((p) => /has no entry in the lockfile/.test(p)));
+});
+
+test('checkPeerLockedFamilies tolerates a lockfile with no packages map', () => {
+  assert.deepEqual(checkPeerLockedFamilies({}, {}, 'root'), []);
+});
+
+test('the real repo lockfile has every peer-locked family in lockstep', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
+});
 
 test('checkVersionInSync returns null when pkg and lock agree', () => {
   const pkg = { name: 'jotjson', version: '0.26.2' };

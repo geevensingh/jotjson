@@ -108,6 +108,74 @@ version.
 
 ---
 
+## Peer-locked dependency families
+
+Some packages peer-depend on each other at an **exact** version, so no
+partial bump can resolve -- npm `ERESOLVE`s on install. The Angular
+runtime + devkit are one such family; the Vitest toolchain is another:
+
+```
+@vitest/browser-playwright@X
+  dependencies:      @vitest/browser  "X"   <- exact
+  peerDependencies:  vitest           "X"   <- exact
+
+@vitest/coverage-v8@X
+  peerDependencies:  vitest           "X"   <- exact
+                     @vitest/browser  "X"   <- exact (optional)
+
+vitest@X
+  peerDependencies:  @vitest/browser-playwright  "X"  <- exact (optional)
+                     @vitest/coverage-v8         "X"  <- exact (optional)
+```
+
+The lock is bidirectional, and one member (`@vitest/browser`) is a pure
+transitive that appears nowhere in `package.json`.
+
+### The rule
+
+Any root family whose members peer-depend on each other with exact pins
+gets all three of:
+
+1. **Its own Dependabot group** in `.github/dependabot.yml`, covering
+   the peer closure, with a comment naming the constraint.
+2. **An exclude in `dev-minor`** (or whatever generic group would
+   otherwise capture it), so members always route to the family group.
+3. **A lockstep assertion** in `PEER_LOCKED_FAMILIES` in
+   `scripts/check-lockfile.mjs`, listing the declared members and any
+   exact-pinned transitive `followers`.
+
+All three are required because they cover different inbound paths. The
+group is *prevention* and only governs Dependabot's **version-update**
+output; the `check-lockfile.mjs` assertion is *detection* and covers a
+security-update PR, a human, or an agent session equally.
+
+### Why (issue #533)
+
+`@vitest/browser` carried two critical advisories (CVE-2026-53633,
+CVE-2026-73653) while sitting in `dev-minor`. Dependabot's **security**
+updater could never remediate it: it is transitive, and its parent pins
+it exactly, so there was no standalone PR to open. The fix could only
+ever ride inside a version-update PR -- and it did, in group PR #491
+(`@vitest/browser-playwright` and `@vitest/coverage-v8` 4.1.7 ->
+4.1.10). When #491 was superseded by the regenerated #523, the
+`@vitest/*` bumps were dropped while co-tenants survived. The advisories
+stayed open with no signal that the remediation had vanished.
+
+This is the same class as the #514 DOMPurify case below: **the package
+that is actually vulnerable is not the package anyone is watching.**
+
+### Known limit
+
+Group membership is the exact-peer-locked set only. A package that
+straddles two families cannot be assigned correctly by any grouping --
+`@analogjs/vitest-angular` peers `vitest` at `^4.0.0` *and*
+`@angular-devkit/architect`, so it stays in `dev-minor`. A Vitest
+**major** therefore still needs a coordinated `@analogjs/vitest-angular`
+bump that Dependabot will not bundle. Document such limits in the group
+comment rather than leaving a claim the config cannot honor.
+
+---
+
 ## Case study: DOMPurify vendored inside Monaco (issue #514)
 
 ### What was wrong

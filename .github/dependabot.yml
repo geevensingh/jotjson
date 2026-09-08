@@ -49,8 +49,48 @@ updates:
         patterns:
           - '@angular/material'
           - '@angular/cdk'
-      # dev-minor catches everything else dev-typed; keep @angular packages
-      # out so they always route to the angular group above.
+      # The Vitest toolchain is peer-locked at an EXACT version, in both
+      # directions: @vitest/browser-playwright peers vitest exactly and
+      # depends on @vitest/browser exactly; @vitest/coverage-v8 peers vitest
+      # exactly (and @vitest/browser exactly, though that peer is optional);
+      # and vitest itself peers back on @vitest/browser-playwright and
+      # @vitest/coverage-v8 at exact versions. A partial bump cannot resolve.
+      #
+      # Why this group exists (issue #533): these packages previously sat in
+      # dev-minor. PR #491 lifted @vitest/browser-playwright and
+      # @vitest/coverage-v8 4.1.7 -> 4.1.10 as incidental riders there; when
+      # that group PR was superseded by the regenerated #523, the @vitest/*
+      # bumps were dropped entirely while co-tenants survived. Two critical
+      # @vitest/browser advisories stayed open with no signal that their
+      # remediation had vanished. Isolating the family means a dropped bump is
+      # a visibly absent PR rather than three quietly missing lines inside a
+      # large one.
+      #
+      # Scope limits, stated so the next reader does not over-trust this:
+      #   - VERSION UPDATES ONLY. Dependabot groups default to
+      #     `applies-to: version-updates`, and one group cannot serve both
+      #     paths. That is the correct scope here: the security updater cannot
+      #     remediate @vitest/browser at all, because it is transitive and its
+      #     parent pins it exactly -- which is why #533 reports no PR. A
+      #     sibling `applies-to: security-updates` group would be inert.
+      #   - 4.x LOCKSTEP ONLY. @analogjs/vitest-angular peers vitest at
+      #     ^4.0.0 and is NOT in this group: it also peers
+      #     @angular-devkit/architect, so it straddles the vitest and angular
+      #     families and no grouping assigns it correctly. A vitest MAJOR will
+      #     therefore additionally require a coordinated
+      #     @analogjs/vitest-angular bump that Dependabot will not bundle.
+      #
+      # update-types is deliberately omitted (matching the angular group): the
+      # exact peer pins break identically at patch, minor, and major, so
+      # restricting by update-type would reopen the hole where it hurts most.
+      #
+      # See docs/supply-chain.md -> "Peer-locked dependency families".
+      vitest:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
+      # dev-minor catches everything else dev-typed; keep @angular and
+      # @vitest packages out so they always route to the groups above.
       dev-minor:
         dependency-type: development
         update-types:
@@ -59,6 +99,8 @@ updates:
         exclude-patterns:
           - '@angular/*'
           - '@angular-devkit/*'
+          - 'vitest'
+          - '@vitest/*'
 
   - package-ecosystem: npm
     directory: /api

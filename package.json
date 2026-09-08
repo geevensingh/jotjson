@@ -36,7 +36,7 @@
     "perf:check-fresh": "node scripts/perf/check-fresh.mjs",
     "preperf:l1": "npm run perf:build",
     "verify:fast": "npm run lint && npm run test:scripts && npm run build:info && vitest run",
-    "lint": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p tsconfig.perf-l2.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs && node scripts/check-prod-patterns.mjs && node scripts/check-csp-hashes.mjs && node scripts/check-swa-config.mjs && node scripts/check-deploy-freshness-cli.mjs && node scripts/check-sw-shape.mjs && node scripts/check-deprecated-telemetry.mjs && node scripts/check-lockfile.mjs && node scripts/check-dependency-overrides.mjs && knip && node scripts/perf/check-no-sentinel-ceilings.mjs && node scripts/check-tree-row-grid.mjs && prettier --check .",
+    "lint": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p tsconfig.perf-l2.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs && node scripts/check-prod-patterns.mjs && node scripts/check-csp-hashes.mjs && node scripts/check-swa-config.mjs && node scripts/check-deploy-freshness-cli.mjs && node scripts/check-sw-shape.mjs && node scripts/check-deprecated-telemetry.mjs && node scripts/check-launch-args.mjs && node scripts/check-lockfile.mjs && node scripts/check-dependency-overrides.mjs && knip && node scripts/perf/check-no-sentinel-ceilings.mjs && node scripts/check-tree-row-grid.mjs && prettier --check .",
     "lint:tsc": "tsc --pretty false --noEmit -p tsconfig.app.json",
     "lint:tsc-spec": "tsc --pretty false --noEmit -p tsconfig.spec.json",
     "lint:tsc-perf-l2": "tsc --pretty false --noEmit -p tsconfig.perf-l2.json",
@@ -49,6 +49,7 @@
     "lint:swa-config": "node scripts/check-swa-config.mjs",
     "lint:deploy-freshness-cli": "node scripts/check-deploy-freshness-cli.mjs",
     "lint:sw-shape": "node scripts/check-sw-shape.mjs",
+    "lint:launch-args": "node scripts/check-launch-args.mjs",
     "lint:deprecated-telemetry": "node scripts/check-deprecated-telemetry.mjs",
     "lint:lockfile": "node scripts/check-lockfile.mjs",
     "lint:dependency-overrides": "node scripts/check-dependency-overrides.mjs",
@@ -106,8 +107,8 @@
     "@azure/cosmos": "^4.9.3",
     "@playwright/test": "^1.60.0",
     "@types/node": "^24.12.4",
-    "@vitest/browser-playwright": "^4.1.7",
-    "@vitest/coverage-v8": "^4.1.7",
+    "@vitest/browser-playwright": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.11",
     "axe-core": "^4.11.4",
     "husky": "^9.1.7",
     "js-yaml": "^4.2.0",
@@ -117,7 +118,7 @@
     "prettier": "^3.8.3",
     "prettier-plugin-organize-imports": "^4.3.0",
     "typescript": "~5.9.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.11"
   },
   "lint-staged": {
     "*.{ts,html,scss,css,json,yml,yaml,bicep,bicepparam,mjs,js}": "prettier --ignore-unknown --write"

@@ -242,6 +242,116 @@ function printMetadataMessage(workspace, offenders) {
  * @param {unknown} lock - parsed package-lock.json contents
  * @returns {string | null}
  */
+/**
+ * Peer-locked families: sets of packages whose members peer-depend on
+ * each other at an EXACT version, so a partial bump cannot resolve.
+ *
+ * `.github/dependabot.yml` groups each family so Dependabot proposes
+ * them together, but a group only constrains Dependabot's
+ * version-update output. It cannot constrain a security-update PR, a
+ * human, or an agent session. This gate is the detection half: it runs
+ * in Phase 1 (pure JSON parse, before `npm ci`) and fails loudly on a
+ * partial bump from ANY inbound path.
+ *
+ * `declared` are the root devDependencies whose ranges must match.
+ * `followers` are transitive packages pinned exactly by a declared
+ * member -- they are not in `package.json` at all, which is exactly why
+ * they need asserting: `@vitest/browser` carried two critical
+ * advisories (issue #533) while being invisible on the manifest.
+ *
+ * See docs/supply-chain.md -> "Peer-locked dependency families".
+ */
+export const PEER_LOCKED_FAMILIES = [
+  {
+    name: 'vitest',
+    workspace: 'root',
+    declared: ['vitest', '@vitest/browser-playwright', '@vitest/coverage-v8'],
+    followers: ['@vitest/browser'],
+    issue: '#533',
+  },
+];
+
+/**
+ * Verifies every peer-locked family in `pkg`/`lock` moves in lockstep.
+ * Returns an array of human-readable problem strings; empty means OK.
+ */
+export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
+  const problems = [];
+  const packages = lock?.packages;
+  if (typeof packages !== 'object' || packages === null) return problems;
+
+  for (const family of PEER_LOCKED_FAMILIES) {
+    if (family.workspace !== workspaceName) continue;
+
+    // 1. Declared ranges must be identical across the family.
+    const ranges = new Map();
+    for (const name of family.declared) {
+      const range = pkg?.devDependencies?.[name] ?? pkg?.dependencies?.[name];
+      if (typeof range !== 'string') {
+        problems.push(
+          `${family.name} family: '${name}' is not declared in package.json. ` +
+            `All of [${family.declared.join(', ')}] must be declared together.`,
+        );
+        continue;
+      }
+      ranges.set(name, range);
+    }
+    const distinctRanges = new Set(ranges.values());
+    if (distinctRanges.size > 1) {
+      const detail = [...ranges].map(([n, r]) => `${n}=${r}`).join(', ');
+      problems.push(
+        `${family.name} family: declared ranges diverge (${detail}). ` +
+          `These packages peer-depend on each other at an exact version, so a ` +
+          `partial bump cannot resolve -- npm will ERESOLVE on install (${family.issue}).`,
+      );
+    }
+
+    // 2. Resolved versions must be identical, across declared AND followers,
+    //    and each must appear exactly once (a nested duplicate means one copy
+    //    is unwatched -- the shape that hides an open advisory).
+    const resolved = new Map();
+    for (const name of [...family.declared, ...family.followers]) {
+      const suffix = `node_modules/${name}`;
+      const entries = Object.keys(packages).filter(
+        (key) => key === suffix || key.endsWith(`/${suffix}`),
+      );
+      if (entries.length === 0) {
+        problems.push(`${family.name} family: '${name}' has no entry in the lockfile.`);
+        continue;
+      }
+      if (entries.length > 1) {
+        problems.push(
+          `${family.name} family: '${name}' resolves to ${entries.length} copies ` +
+            `(${entries.join(', ')}). Exactly one is required -- a nested duplicate ` +
+            `leaves a second, unwatched copy that can silently carry an advisory (${family.issue}).`,
+        );
+        continue;
+      }
+      resolved.set(name, packages[entries[0]]?.version);
+    }
+    const distinctResolved = new Set(resolved.values());
+    if (distinctResolved.size > 1) {
+      const detail = [...resolved].map(([n, v]) => `${n}@${v}`).join(', ');
+      problems.push(
+        `${family.name} family: resolved versions diverge (${detail}). ` +
+          `Every member -- including transitives not named in package.json -- ` +
+          `must be at the same version (${family.issue}).`,
+      );
+    }
+  }
+  return problems;
+}
+
+function printPeerLockedFamilyMessage(workspace, problems) {
+  console.error('');
+  console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (peer-locked family)`);
+  for (const problem of problems) {
+    console.error(`  ${problem}`);
+  }
+  console.error('  Fix: bump every member of the family to the same version in one change.');
+  console.error('    See docs/supply-chain.md -> "Peer-locked dependency families".');
+}
+
 export function checkVersionInSync(pkg, lock) {
   if (typeof pkg !== 'object' || pkg === null) {
     return 'package.json did not parse to an object';
@@ -396,7 +506,8 @@ export function main(argv = process.argv.slice(2)) {
     // once and then every reason under it.
     const versionDrift = checkVersionInSync(pkg, lock);
     const offenders = checkMetadataFields(lock);
-    if (versionDrift !== null || offenders.length > 0) {
+    const familyProblems = checkPeerLockedFamilies(pkg, lock, workspace.name);
+    if (versionDrift !== null || offenders.length > 0 || familyProblems.length > 0) {
       process.stdout.write(`check-lockfile: validating workspace '${workspace.name}' ... FAIL\n`);
       if (versionDrift !== null) {
         printVersionDriftMessage(workspace, versionDrift);
@@ -404,7 +515,17 @@ export function main(argv = process.argv.slice(2)) {
       if (offenders.length > 0) {
         printMetadataMessage(workspace, offenders);
       }
-      firstFailure = { kind: versionDrift !== null ? 'version-drift' : 'metadata' };
+      if (familyProblems.length > 0) {
+        printPeerLockedFamilyMessage(workspace, familyProblems);
+      }
+      firstFailure = {
+        kind:
+          versionDrift !== null
+            ? 'version-drift'
+            : offenders.length > 0
+              ? 'metadata'
+              : 'peer-locked-family',
+      };
     }
   }
   if (firstFailure) {
@@ -412,7 +533,9 @@ export function main(argv = process.argv.slice(2)) {
   }
 
   if (metadataOnly) {
-    console.log('check-lockfile: OK (root + api/ lockfile metadata: version, resolved, integrity)');
+    console.log(
+      'check-lockfile: OK (root + api/ lockfile metadata: version, resolved, integrity; peer-locked families in lockstep)',
+    );
     return 0;
   }
 

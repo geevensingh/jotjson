@@ -29,12 +29,26 @@ const projectRoot = fileURLToPath(new URL('.', import.meta.url));
  *
  * Historical note: PR #418 attempted to pass these via
  * `instances[].launch.args`, but `@vitest/browser-playwright`
- * silently ignores that field. The launch options are only read
- * from the `playwright({ launchOptions: { args: [...] } })` factory
- * argument (verified in
- * `node_modules/@vitest/browser-playwright/dist/index.js` lines
- * 867-872). All callers must funnel launch args through the
- * `makeBrowserConfig()` helper below.
+ * silently ignores that field. Launch options are read *only* from
+ * the `playwright({ launchOptions: { args: [...] } })` factory
+ * argument, which the provider spreads into the object it hands to
+ * Playwright's `.launch()`. All callers must funnel launch args
+ * through the `makeBrowserConfig()` helper below.
+ *
+ * Re-verified against `@vitest/browser-playwright@4.1.11` (issue
+ * #533): still no read of `instances[].launch`. This note
+ * deliberately cites the package version rather than line numbers in
+ * `node_modules` -- the previous wording pinned specific dist lines,
+ * which are gitignored, unversioned, and renumber on every patch
+ * release (they moved by ~14 lines between 4.1.7 and 4.1.11).
+ *
+ * The composition itself is enforced by
+ * `scripts/check-launch-args.mjs` in the `lint` chain, and proven at
+ * runtime by `ensureGc()` in `json-tree.component.perf.ts`, which
+ * throws if `--js-flags=--expose-gc` failed to reach Chromium.
+ *
+ * Dependabot keeps this family in lockstep via the `vitest` group in
+ * `.github/dependabot.yml`.
  */
 export const COMMON_LAUNCH_ARGS: readonly string[] = [
   '--no-sandbox',
