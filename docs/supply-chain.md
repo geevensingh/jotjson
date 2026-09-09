@@ -176,6 +176,68 @@ comment rather than leaving a claim the config cannot honor.
 
 ---
 
+## Registry provenance in the lockfile
+
+Every `resolved` URL in a committed lockfile must point at
+`registry.npmjs.org`, and every `integrity` must be `sha512-`. Both are
+enforced by `checkMetadataFields` in `scripts/check-lockfile.mjs`, which
+runs in CI *before* `npm ci`.
+
+### The failure mode (PR #534)
+
+If your `npm config get registry` points at a corporate proxy -- an Azure
+DevOps feed, Artifactory, Verdaccio -- then **any** command that
+re-resolves part of the tree will rewrite those entries:
+
+```
+"resolved": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/...",
+"integrity": "sha1-FlPBUhrpF/lg2bIYd3l8R9/YvyE="
+```
+
+Two distinct problems, neither of which any pre-existing gate caught:
+
+1. **Non-reproducible.** Contributors and CI outside that network cannot
+   resolve the URL. It also leaks internal infrastructure names into a
+   public repo.
+2. **Weaker digest.** An Azure DevOps feed advertises the legacy `shasum`
+   rather than `dist.integrity`, so npm records **sha1** instead of
+   sha512.
+
+`npm ci` accepts all of it, and CI can even pass if the proxy happens to
+be publicly reachable -- which is exactly what happened on #534, where 34
+entries were rewritten and every check went green.
+
+### Repairing it
+
+Do **not** regenerate the lockfile; that re-resolves every range and
+floats versions (AGENTS.md Section 7 #13). Repair the affected entries in
+place, taking `resolved` and `integrity` from the public registry:
+
+```
+npm view <name>@<version> dist.tarball dist.integrity \
+  --registry=https://registry.npmjs.org/ --json
+```
+
+`--registry` overrides the configured proxy for metadata reads, so this
+works even on a machine pointed at one. Afterwards, confirm the repair
+changed metadata only:
+
+- `npm run lint:lockfile-metadata` passes.
+- No entry's `version` changed (diff the lockfile and check).
+- Entries also present on `main` at the same version match it exactly.
+
+### Prevention
+
+Prefer running dependency commands with the public registry explicitly:
+
+```
+npm install --registry=https://registry.npmjs.org/ ...
+```
+
+The gate is the backstop, not the plan.
+
+---
+
 ## Case study: DOMPurify vendored inside Monaco (issue #514)
 
 ### What was wrong

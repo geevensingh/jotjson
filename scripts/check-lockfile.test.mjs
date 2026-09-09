@@ -112,6 +112,75 @@ test('the real repo lockfile has every peer-locked family in lockstep', () => {
   assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
 });
 
+// Registry provenance + digest strength (PR #534). A corporate npm proxy
+// rewrites `resolved` to its own host and can downgrade `integrity` from
+// sha512 to sha1; `npm ci` accepts both, so nothing else catches it.
+function lockWithEntry(entry) {
+  return { packages: { '': { version: '1.0.0' }, 'node_modules/x': entry } };
+}
+
+const GOOD_ENTRY = {
+  version: '1.0.0',
+  resolved: 'https://registry.npmjs.org/x/-/x-1.0.0.tgz',
+  integrity: 'sha512-abc==',
+};
+
+test('checkMetadataFields accepts a public-registry sha512 entry', () => {
+  assert.deepEqual(checkMetadataFields(lockWithEntry(GOOD_ENTRY)), []);
+});
+
+test('checkMetadataFields flags a private-mirror resolved host', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({
+      ...GOOD_ENTRY,
+      resolved:
+        'https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/x/-/x-1.0.0.tgz',
+    }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /ms-feed-25\.pkgs\.visualstudio\.com/);
+  assert.match(offenders[0].reason, /registry\.npmjs\.org/);
+});
+
+test('checkMetadataFields flags sha1 integrity', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha1-u+EtyltO+YOg0K9LB7m8kOoKuro=' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /'sha1', expected 'sha512'/);
+});
+
+test('checkMetadataFields flags an unparsable resolved URL', () => {
+  const offenders = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, resolved: 'not a url' }));
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /not a parsable URL/);
+});
+
+test('checkMetadataFields still allows file: and git+ sources', () => {
+  assert.deepEqual(
+    checkMetadataFields(
+      lockWithEntry({ version: '1.0.0', resolved: 'file:../local', integrity: 'sha512-abc==' }),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    checkMetadataFields(
+      lockWithEntry({
+        version: '1.0.0',
+        resolved: 'git+ssh://git@github.com/o/r.git#' + 'a'.repeat(40),
+      }),
+    ),
+    [],
+  );
+});
+
+test('every committed lockfile entry resolves to the public registry with sha512', () => {
+  for (const file of ['package-lock.json', 'api/package-lock.json']) {
+    const lock = JSON.parse(readFileSync(resolve(repoRoot, file), 'utf8'));
+    assert.deepEqual(checkMetadataFields(lock), [], `${file} has metadata offenders`);
+  }
+});
+
 test('checkVersionInSync returns null when pkg and lock agree', () => {
   const pkg = { name: 'jotjson', version: '0.26.2' };
   const lock = {

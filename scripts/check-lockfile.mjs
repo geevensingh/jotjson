@@ -66,6 +66,17 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/**
+ * The only tarball host a committed lockfile may name.
+ *
+ * Corporate npm proxies (Azure DevOps feeds, Artifactory, Verdaccio) rewrite
+ * `resolved` to their own URL when they serve a package. That is fine for a
+ * local install and poison in a committed lockfile: contributors and CI
+ * outside that network cannot resolve it, and the host name itself may be
+ * internal. See `checkMetadataFields` for the full failure story (PR #534).
+ */
+const PUBLIC_REGISTRY_HOST = 'registry.npmjs.org';
+
 const WORKSPACES = [
   { name: 'root', prefix: null, lockfile: 'package-lock.json', manifest: 'package.json' },
   {
@@ -179,6 +190,54 @@ export function checkMetadataFields(lock) {
 
     if (!hasIntegrity) {
       offenders.push({ path, reason: 'missing `integrity`' });
+      continue;
+    }
+
+    // Registry provenance. `npm ci` happily installs whatever host the
+    // lockfile names, so a private-mirror URL is silently non-reproducible
+    // for anyone who cannot reach that host -- and it can leak internal
+    // infrastructure names into a public repo.
+    //
+    // This is the sibling of the issue #509 shape above: that gate catches
+    // metadata that is *missing*, this one catches metadata that is
+    // *wrong*. Both are invariants `npm ci` does not enforce.
+    //
+    // How it happens (observed on PR #534): a contributor or agent whose
+    // `npm config get registry` points at a corporate proxy re-resolves
+    // part of the tree. npm rewrites `resolved` to the proxy's tarball URL
+    // and records whatever digest the proxy advertises -- for an Azure
+    // DevOps feed that is the legacy `shasum`, so `integrity` silently
+    // degrades from sha512 to sha1. CI still passed, because the proxy was
+    // publicly reachable; the damage was reproducibility, provenance, and
+    // digest strength, none of which any existing gate checked.
+    if (!/^file:/.test(resolved)) {
+      let host = null;
+      try {
+        host = new URL(resolved).host;
+      } catch {
+        offenders.push({ path, reason: `\`resolved\` is not a parsable URL: ${resolved}` });
+        continue;
+      }
+      if (host !== PUBLIC_REGISTRY_HOST) {
+        offenders.push({
+          path,
+          reason:
+            `\`resolved\` points at '${host}', not '${PUBLIC_REGISTRY_HOST}'. ` +
+            `Re-resolve with \`--registry=https://${PUBLIC_REGISTRY_HOST}/\`.`,
+        });
+        continue;
+      }
+    }
+
+    // Digest strength. npm accepts sha1 for backwards compatibility, but
+    // every entry the public registry serves today carries sha512, so a
+    // sha1 entry means the metadata came from somewhere else.
+    const integrity = String(record['integrity']);
+    if (!integrity.startsWith('sha512-')) {
+      offenders.push({
+        path,
+        reason: `\`integrity\` is '${integrity.split('-')[0]}', expected 'sha512'`,
+      });
     }
   }
 
@@ -187,7 +246,6 @@ export function checkMetadataFields(lock) {
 
 /** Number of offending entries listed before truncating the report. */
 const MAX_REPORTED_OFFENDERS = 10;
-
 /**
  * Prints the safe lockfile-regeneration recipe for a workspace.
  *
