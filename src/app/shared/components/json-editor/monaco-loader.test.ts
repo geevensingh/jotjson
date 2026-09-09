@@ -407,7 +407,7 @@ describe('monaco-loader', () => {
     expect(window.monaco).toBe(fakeMonaco);
   });
 
-  it('preserves a caller-installed MonacoEnvironment object and its getWorker', async () => {
+  it('leaves a caller-installed MonacoEnvironment untouched', async () => {
     const captured = interceptLoaderInjection();
     const callerGetWorker = vi.fn() as unknown as NonNullable<
       NonNullable<typeof window.MonacoEnvironment>['getWorker']
@@ -417,13 +417,15 @@ describe('monaco-loader', () => {
 
     const pending = loadMonaco();
 
-    // The loader owns `getWorkerUrl` and nothing else here, so it adds
-    // its key in place: a caller that kept a reference (the browser
-    // integration spec holds one to delete `getWorker` before revoking
-    // its blob URL) must still be looking at the live object.
+    // The loader writes nothing to this global (issue #524): real
+    // Monaco *assigns* `self.MonacoEnvironment` when
+    // `vs/editor/editor.main` evaluates, so anything staged here
+    // beforehand would be discarded anyway. This spec drives a fake
+    // `require` that never evaluates the real module, so the caller's
+    // object must survive verbatim - same identity, same keys.
     expect(window.MonacoEnvironment).toBe(callerEnvironment);
     expect(window.MonacoEnvironment?.getWorker).toBe(callerGetWorker);
-    expect(typeof window.MonacoEnvironment?.getWorkerUrl).toBe('function');
+    expect(Object.keys(callerEnvironment)).toEqual(['getWorker']);
 
     const injection = onlyInjection(captured);
     window.require = makeAmdRequire(() => {
