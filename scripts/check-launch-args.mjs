@@ -138,6 +138,20 @@ const PROVIDER_ARGS =
   /playwright\s*\(\s*\{[\s\S]*?launchOptions\s*:\s*\{[\s\S]*?args\s*:\s*\[([\s\S]*?)\][\s\S]*?\}[\s\S]*?\}\s*\)/;
 
 /**
+ * The exact `launchOptions.args` composition, after whitespace is stripped
+ * (a trailing comma is allowed).
+ *
+ * Order is load-bearing, not cosmetic: `args` is a flat argv, and Chromium
+ * honors the LAST occurrence of a repeated switch. `COMMON_LAUNCH_ARGS` is
+ * the shared baseline and `extraArgs` is the per-harness override, so
+ * `extraArgs` must come second or a caller could not override a baseline
+ * flag. An earlier revision of this gate tested for the two spreads
+ * independently, which accepted `[...extraArgs, ...COMMON_LAUNCH_ARGS]`
+ * and any duplicate or additional entry.
+ */
+const EXPECTED_COMPOSITION = /^\.\.\.COMMON_LAUNCH_ARGS,\.\.\.extraArgs,?$/;
+
+/**
  * Matches an `instances: [...]` entry carrying a `launch` field -- the
  * PR #418 regression shape. Deliberately loose: any `launch` key
  * appearing within an `instances` array literal is a violation, whether
@@ -189,19 +203,36 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
     );
   } else {
     const composition = providerArgs[1].replace(/\s+/g, '');
-    if (!composition.includes('...COMMON_LAUNCH_ARGS')) {
+    if (!EXPECTED_COMPOSITION.test(composition)) {
+      const missingCommon = !composition.includes('...COMMON_LAUNCH_ARGS');
+      const missingExtra = !composition.includes('...extraArgs');
+      let why;
+      if (missingCommon && missingExtra) {
+        why =
+          'it spreads neither COMMON_LAUNCH_ARGS nor extraArgs. Dropping the ' +
+          'baseline silently strips --no-sandbox / --disable-gpu / ' +
+          '--disable-dev-shm-usage from every browser run, with no test failure ' +
+          'on GitHub-hosted VM runners.';
+      } else if (missingCommon) {
+        why =
+          'it does not spread COMMON_LAUNCH_ARGS. That silently strips ' +
+          '--no-sandbox / --disable-gpu / --disable-dev-shm-usage from every ' +
+          'browser run, with no test failure on GitHub-hosted VM runners.';
+      } else if (missingExtra) {
+        why =
+          'it does not spread extraArgs. The L2 perf bench passes ' +
+          '--js-flags=--expose-gc through that parameter; dropping it breaks ensureGc().';
+      } else {
+        why =
+          'the spreads are out of order or carry extra entries. `args` is a flat ' +
+          'argv and Chromium honors the LAST occurrence of a repeated switch, so ' +
+          'COMMON_LAUNCH_ARGS must come first and extraArgs must come second -- ' +
+          'otherwise a harness cannot override a baseline flag.';
+      }
       violations.push(
-        `${path}: the provider's \`launchOptions.args\` does not spread COMMON_LAUNCH_ARGS. ` +
-          `Found \`[${providerArgs[1].trim()}]\`. Dropping the spread silently strips ` +
-          `--no-sandbox / --disable-gpu / --disable-dev-shm-usage from every browser run, ` +
-          `with no test failure on GitHub-hosted VM runners.`,
-      );
-    }
-    if (!composition.includes('...extraArgs')) {
-      violations.push(
-        `${path}: the provider's \`launchOptions.args\` does not spread extraArgs. ` +
-          `Found \`[${providerArgs[1].trim()}]\`. The L2 perf bench passes ` +
-          `--js-flags=--expose-gc through this parameter; dropping it breaks ensureGc().`,
+        `${path}: the provider's \`launchOptions.args\` must be exactly ` +
+          `\`[...COMMON_LAUNCH_ARGS, ...extraArgs]\`, but ${why} ` +
+          `Found \`[${providerArgs[1].trim()}]\`.`,
       );
     }
   }

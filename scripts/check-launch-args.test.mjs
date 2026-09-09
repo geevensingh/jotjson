@@ -82,6 +82,47 @@ test('flags a dropped extraArgs spread -- breaks ensureGc()', () => {
   assert.match(violations[0], /does not spread extraArgs/);
 });
 
+// Order is load-bearing: `args` is a flat argv and Chromium honors the last
+// occurrence of a repeated switch, so extraArgs must be appended, not
+// prepended. An earlier revision tested for the two spreads independently
+// and accepted this.
+test('flags a reversed composition even though both spreads are present', () => {
+  const violations = lintSharedConfig(
+    goodSource({ composition: '...extraArgs, ...COMMON_LAUNCH_ARGS' }),
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /out of order or carry extra entries/);
+});
+
+test('flags a duplicated spread', () => {
+  const violations = lintSharedConfig(
+    goodSource({ composition: '...COMMON_LAUNCH_ARGS, ...COMMON_LAUNCH_ARGS, ...extraArgs' }),
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /out of order or carry extra entries/);
+});
+
+test('flags an extra inline entry smuggled into the composition', () => {
+  const violations = lintSharedConfig(
+    goodSource({ composition: "...COMMON_LAUNCH_ARGS, '--single-process', ...extraArgs" }),
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /out of order or carry extra entries/);
+});
+
+test('flags an empty args array', () => {
+  const violations = lintSharedConfig(goodSource({ composition: '' }));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /spreads neither/);
+});
+
+test('accepts a trailing comma in the composition', () => {
+  assert.deepEqual(
+    lintSharedConfig(goodSource({ composition: '...COMMON_LAUNCH_ARGS, ...extraArgs,' })),
+    [],
+  );
+});
+
 test('flags a missing playwright() factory call', () => {
   const source = goodSource().replace(
     /provider: playwright\([\s\S]*?\}\),/,

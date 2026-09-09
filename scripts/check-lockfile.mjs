@@ -289,18 +289,6 @@ function printMetadataMessage(workspace, offenders) {
 }
 
 /**
- * Pure function: compares the root `version` field in package.json against
- * the two places it is mirrored in package-lock.json (`lock.version` and
- * `lock.packages[""].version`). Returns null on match, or a short
- * single-line message describing the drift on mismatch.
- *
- * Exported for unit-testing under `scripts/check-lockfile.test.mjs`.
- *
- * @param {unknown} pkg - parsed package.json contents
- * @param {unknown} lock - parsed package-lock.json contents
- * @returns {string | null}
- */
-/**
  * Peer-locked families: sets of packages whose members peer-depend on
  * each other at an EXACT version, so a partial bump cannot resolve.
  *
@@ -410,6 +398,18 @@ function printPeerLockedFamilyMessage(workspace, problems) {
   console.error('    See docs/supply-chain.md -> "Peer-locked dependency families".');
 }
 
+/**
+ * Pure function: compares the root `version` field in package.json against
+ * the two places it is mirrored in package-lock.json (`lock.version` and
+ * `lock.packages[""].version`). Returns null on match, or a short
+ * single-line message describing the drift on mismatch.
+ *
+ * Exported for unit-testing under `scripts/check-lockfile.test.mjs`.
+ *
+ * @param {unknown} pkg - parsed package.json contents
+ * @param {unknown} lock - parsed package-lock.json contents
+ * @returns {string | null}
+ */
 export function checkVersionInSync(pkg, lock) {
   if (typeof pkg !== 'object' || pkg === null) {
     return 'package.json did not parse to an object';
