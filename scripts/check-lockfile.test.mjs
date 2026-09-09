@@ -293,6 +293,23 @@ test('checkMetadataFields still allows file: and git+ sources', () => {
   );
 });
 
+// Deliberate: a remote tarball on another host is a dependency Dependabot
+// and npm audit cannot see, even with valid integrity. Documented in
+// checkMetadataFields' contract and docs/supply-chain.md.
+test('checkMetadataFields rejects a remote tarball on another host despite valid sha512', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({
+      version: '1.0.0',
+      resolved: 'https://example.com/pkg/-/pkg-1.0.0.tgz',
+      integrity: 'sha512-abc==',
+    }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.equal(offenders[0].kind, 'provenance');
+  assert.match(offenders[0].reason, /example\.com/);
+  assert.match(offenders[0].reason, /Remote tarballs from other hosts are not allowed/);
+});
+
 test('every committed lockfile entry resolves to the public registry with sha512', () => {
   for (const file of ['package-lock.json', 'api/package-lock.json']) {
     const lock = JSON.parse(readFileSync(resolve(repoRoot, file), 'utf8'));

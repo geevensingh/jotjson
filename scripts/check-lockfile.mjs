@@ -126,18 +126,40 @@ function findNpmCli() {
  *                        immutable 40-hex commit SHA; a mutable ref such
  *                        as `#main` is exactly as unverifiable as a
  *                        missing hash, so it fails.
- *   - everything else -> registry, remote tarball, or local tarball. Must
- *                        carry both `resolved` and a non-empty `integrity`.
+ *   - `file:` sources -> a local path; there is no host to check.
+ *   - everything else -> must be a public-registry tarball. Must carry
+ *                        both `resolved` and a non-empty `integrity`, and
+ *                        must satisfy the provenance rules below.
+ *
+ * Provenance (PR #534). Presence is not enough: a `resolved` URL must name
+ * `registry.npmjs.org` over https, with no userinfo, query string, or
+ * fragment, and `integrity` must be sha512.
+ *
+ * This deliberately forbids **remote tarballs from any other host**, even
+ * with valid integrity. An arbitrary HTTPS tarball is a dependency that
+ * Dependabot cannot version-update or security-patch and that `npm audit`
+ * cannot see -- a package nobody is watching, which is the exact failure
+ * class behind issues #514 and #533. The repo has none today (1248/1248
+ * root entries are public-registry), so this codifies the existing state.
+ * If one is ever genuinely required, relax this gate deliberately and
+ * record the justification, the same way root `overrides` are classified
+ * in `scripts/check-dependency-overrides.mjs`.
  *
  * Presence, not grammar: we deliberately do not validate the SRI string
- * beyond non-emptiness. Hash *correctness* is `npm ci`'s job -- it verifies
- * each tarball on download. Re-implementing npm's accepted integrity
- * grammar here would risk false positives for no added signal.
+ * beyond its algorithm prefix. Hash *correctness* is `npm ci`'s job -- it
+ * verifies each tarball on download. Re-implementing npm's accepted
+ * integrity grammar here would risk false positives for no added signal.
+ *
+ * Offenders carry a `kind`: `missing` (issue #509 -- fix by regenerating)
+ * or `provenance` (PR #534 -- fix in place; regenerating would float
+ * unrelated versions). `printMetadataMessage` reports them separately
+ * because the remediations are opposites.
  *
  * Exported for unit-testing under `scripts/check-lockfile.test.mjs`.
  *
  * @param {unknown} lock - parsed package-lock.json contents
- * @returns {{ path: string, reason: string }[]} offenders, sorted by path
+ * @returns {{ path: string, kind: 'missing' | 'provenance', reason: string }[]}
+ *   offenders, sorted by path
  */
 export function checkMetadataFields(lock) {
   if (typeof lock !== 'object' || lock === null) {
@@ -235,7 +257,9 @@ export function checkMetadataFields(lock) {
           kind: 'provenance',
           reason:
             `\`resolved\` points at '${url.host}', not '${PUBLIC_REGISTRY_HOST}'. ` +
-            `Re-resolve with \`--registry=https://${PUBLIC_REGISTRY_HOST}/\`.`,
+            `If this came from a corporate mirror, re-resolve with ` +
+            `\`--registry=https://${PUBLIC_REGISTRY_HOST}/\`. Remote tarballs from ` +
+            `other hosts are not allowed: Dependabot and npm audit cannot see them.`,
         });
         continue;
       }

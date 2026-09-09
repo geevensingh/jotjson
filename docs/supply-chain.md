@@ -195,6 +195,13 @@ tarballs:
 The repo currently has neither, but the exemptions are in the checker so
 adding one later does not require weakening the registry rule.
 
+**Remote tarballs from other hosts are forbidden**, even with a valid
+sha512. `https://example.com/pkg.tgz` is a dependency Dependabot cannot
+version-update or security-patch and that `npm audit` cannot see -- a
+package nobody is watching, which is the failure class behind #514 and
+#533. If one is ever genuinely required, relax the gate deliberately and
+record the justification, the same way root `overrides` are classified.
+
 ### Scope: this codifies the existing state, it does not change workflow
 
 This is not a new constraint on how you install. Before PR #534 every one
