@@ -163,11 +163,19 @@ function findNpmCli() {
  */
 export function checkMetadataFields(lock) {
   if (typeof lock !== 'object' || lock === null) {
-    return [{ path: '<file>', reason: 'package-lock.json did not parse to an object' }];
+    return [
+      { path: '<file>', kind: 'missing', reason: 'package-lock.json did not parse to an object' },
+    ];
   }
   const packages = /** @type {Record<string, unknown>} */ (lock).packages;
   if (typeof packages !== 'object' || packages === null) {
-    return [{ path: '<file>', reason: 'package-lock.json is missing the `packages` map' }];
+    return [
+      {
+        path: '<file>',
+        kind: 'missing',
+        reason: 'package-lock.json is missing the `packages` map',
+      },
+    ];
   }
 
   const nonEmptyString = (value) => typeof value === 'string' && value.length > 0;
@@ -179,7 +187,7 @@ export function checkMetadataFields(lock) {
 
     const entry = /** @type {Record<string, unknown>} */ (packages)[path];
     if (typeof entry !== 'object' || entry === null) {
-      offenders.push({ path, reason: 'entry is not an object' });
+      offenders.push({ path, kind: 'missing', reason: 'entry is not an object' });
       continue;
     }
     const record = /** @type {Record<string, unknown>} */ (entry);
@@ -527,15 +535,23 @@ export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
         problems.push(`${family.name} family: '${name}' has no entry in the lockfile.`);
         continue;
       }
-      if (entries.length > 1) {
+      // npm legitimately nests a duplicate copy when peer contexts differ.
+      // What matters for an exact-peer-locked family is that every copy is
+      // the SAME version: identical copies cannot carry a stale advisory,
+      // which is the whole reason this check exists. Only divergent copies
+      // are a problem, so compare versions rather than counting entries.
+      const versions = [...new Set(entries.map((key) => packages[key]?.version))];
+      if (versions.length > 1) {
+        const detail = entries.map((key) => `${key}@${packages[key]?.version}`).join(', ');
         problems.push(
-          `${family.name} family: '${name}' resolves to ${entries.length} copies ` +
-            `(${entries.join(', ')}). Exactly one is required -- a nested duplicate ` +
-            `leaves a second, unwatched copy that can silently carry an advisory (${family.issue}).`,
+          `${family.name} family: '${name}' resolves to ${entries.length} copies at ` +
+            `differing versions (${detail}). Every copy must be the same version -- ` +
+            `otherwise one is an unwatched duplicate that can silently carry an ` +
+            `advisory (${family.issue}).`,
         );
         continue;
       }
-      resolved.set(name, packages[entries[0]]?.version);
+      resolved.set(name, versions[0]);
     }
     const distinctResolved = new Set(resolved.values());
     if (distinctResolved.size > 1) {

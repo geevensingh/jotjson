@@ -81,12 +81,64 @@ test('checkPeerLockedFamilies flags a stale transitive follower', () => {
   assert.match(problems[0], /@vitest\/browser@4\.1\.7/);
 });
 
-test('checkPeerLockedFamilies flags a nested duplicate copy', () => {
+// The `kind` discriminator must be total: `printMetadataMessage` branches on
+// it, and an offender without one would silently fall into the "missing"
+// bucket and be handed regeneration advice it may not warrant.
+test('every checkMetadataFields offender carries a kind, including early returns', () => {
+  const cases = [
+    ['non-object lockfile', null],
+    ['lockfile with no packages map', {}],
+    ['non-object entry', { packages: { '': { version: '1.0.0' }, 'node_modules/x': null } }],
+    ['missing metadata', lockWithEntry({ version: '1.0.0' })],
+    ['provenance failure', lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha1-abc=' })],
+  ];
+  for (const [label, lock] of cases) {
+    const offenders = checkMetadataFields(lock);
+    assert.ok(offenders.length > 0, `${label}: expected at least one offender`);
+    for (const offender of offenders) {
+      assert.ok(
+        offender.kind === 'missing' || offender.kind === 'provenance',
+        `${label}: offender has kind ${JSON.stringify(offender.kind)}`,
+      );
+    }
+  }
+});
+
+test('checkMetadataFields tags the malformed-lockfile early returns as missing', () => {
+  assert.equal(checkMetadataFields(null)[0].kind, 'missing');
+  assert.equal(checkMetadataFields({})[0].kind, 'missing');
+  const nonObjectEntry = checkMetadataFields({
+    packages: { '': { version: '1.0.0' }, 'node_modules/x': null },
+  });
+  assert.equal(nonObjectEntry[0].kind, 'missing');
+});
+
+// npm can nest a duplicate copy for peer-context reasons. Identical copies
+// cannot carry a stale advisory, so only divergent copies are a problem.
+test('checkPeerLockedFamilies allows same-version duplicate copies', () => {
+  const { pkg, lock } = vitestFixture();
+  lock.packages['node_modules/vitest/node_modules/@vitest/browser'] = { version: '4.1.11' };
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
+});
+
+test('checkPeerLockedFamilies flags duplicate copies at differing versions', () => {
   const { pkg, lock } = vitestFixture();
   lock.packages['node_modules/vitest/node_modules/@vitest/browser'] = { version: '4.1.7' };
   const problems = checkPeerLockedFamilies(pkg, lock, 'root');
   assert.equal(problems.length, 1);
-  assert.match(problems[0], /resolves to 2 copies/);
+  assert.match(problems[0], /differing versions/);
+  assert.match(problems[0], /4\.1\.7/);
+});
+
+test('a same-version duplicate still feeds the common version into the family check', () => {
+  const { pkg, lock } = vitestFixture();
+  // Both copies agree with each other but disagree with the rest of the family.
+  lock.packages['node_modules/@vitest/browser'].version = '4.1.7';
+  lock.packages['node_modules/vitest/node_modules/@vitest/browser'] = { version: '4.1.7' };
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /resolved versions diverge/);
+  assert.match(problems[0], /@vitest\/browser@4\.1\.7/);
 });
 
 test('checkPeerLockedFamilies flags an undeclared family member', () => {
