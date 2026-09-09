@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import {
   EXPECTED_COMMON_LAUNCH_ARGS,
   extractInstancesArrays,
+  extractMakeBrowserConfigBody,
   lintInstancesLaunch,
   lintRepo,
   lintSharedConfig,
@@ -202,6 +203,81 @@ export function makeBrowserConfig(extraArgs = []) {
   const violations = lintSharedConfig(source);
   assert.equal(violations.length, 1);
   assert.match(violations[0], /could not find a .*provider: playwright/);
+});
+
+// The test above uses a decoy with no `provider:` key, so it did not cover
+// the real false negative: an unrelated object literal that *does* use
+// `provider:` while makeBrowserConfig returns something else. The check is
+// now scoped to makeBrowserConfig's body.
+test('an unused object literal with a correct provider does not satisfy the gate', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+const other = { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };
+
+export function makeBrowserConfig(extraArgs = []) {
+  return { provider: somethingElse() };
+}
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /could not find a .*provider: playwright/);
+});
+
+test('`myprovider:` does not satisfy the provider anchor', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+export function makeBrowserConfig(extraArgs = []) {
+  return { myprovider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };
+}
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /could not find a .*provider: playwright/);
+});
+
+test('flags a missing makeBrowserConfig helper outright', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /could not find a .*makeBrowserConfig/);
+});
+
+test('extractMakeBrowserConfigBody survives brackets in the parameter list', () => {
+  const code = 'function makeBrowserConfig(extraArgs = [], overrides = {}) { return MARKER; }';
+  const scope = extractMakeBrowserConfigBody(code);
+  assert.ok(scope, 'expected a body');
+  assert.match(scope.body, /MARKER/);
+  assert.equal(code.slice(scope.start, scope.start + scope.body.length), scope.body);
+});
+
+// The extractor was string-aware, but the launch-key test then ran against
+// the raw body, so a string *containing* `launch:` was reported as a real
+// property.
+test('lintInstancesLaunch ignores `launch:` inside a string-valued instance option', () => {
+  const source = "instances: [{ browser: 'chromium', note: 'do not use launch: here' }],";
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch still flags a real launch beside a string decoy', () => {
+  const source =
+    "instances: [{ browser: 'chromium', note: 'launch: mentioned', launch: { args: [] } }],";
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
 });
 
 test('the real flag literals are still read through the mask', () => {

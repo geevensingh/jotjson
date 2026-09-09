@@ -37,6 +37,13 @@ function vitestFixture(version = '4.1.11', range = '^4.1.11') {
     '@vitest/browser-playwright',
     '@vitest/coverage-v8',
     '@vitest/browser',
+    '@vitest/expect',
+    '@vitest/mocker',
+    '@vitest/pretty-format',
+    '@vitest/runner',
+    '@vitest/snapshot',
+    '@vitest/spy',
+    '@vitest/utils',
   ];
   const packages = { '': { version: '1.0.0' } };
   for (const name of members) packages[`node_modules/${name}`] = { version };
@@ -79,6 +86,33 @@ test('checkPeerLockedFamilies flags a stale transitive follower', () => {
   assert.equal(problems.length, 1);
   assert.match(problems[0], /resolved versions diverge/);
   assert.match(problems[0], /@vitest\/browser@4\.1\.7/);
+});
+
+// `vitest` pins its whole runtime surface at its own exact version, so any
+// one of them going stale is the same drift as @vitest/browser.
+test('the vitest followers cover every exact-pinned runtime package', () => {
+  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'vitest');
+  for (const name of [
+    '@vitest/browser',
+    '@vitest/expect',
+    '@vitest/mocker',
+    '@vitest/pretty-format',
+    '@vitest/runner',
+    '@vitest/snapshot',
+    '@vitest/spy',
+    '@vitest/utils',
+  ]) {
+    assert.ok(family.followers.includes(name), `missing follower '${name}'`);
+  }
+});
+
+test('checkPeerLockedFamilies flags a stale @vitest/runner in the real lockfile', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  lock.packages['node_modules/@vitest/runner'].version = '4.1.7';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /@vitest\/runner@4\.1\.7/);
 });
 
 // The `kind` discriminator must be total: `printMetadataMessage` branches on

@@ -431,7 +431,21 @@ export const PEER_LOCKED_FAMILIES = [
     name: 'vitest',
     workspace: 'root',
     declared: ['vitest', '@vitest/browser-playwright', '@vitest/coverage-v8'],
-    followers: ['@vitest/browser'],
+    // Exact-pinned transitives. None of these appear in package.json, which
+    // is precisely why they need asserting: @vitest/browser carried two
+    // critical advisories (#533) while invisible on the manifest. `vitest`
+    // itself pins the rest of this list at its own exact version, so any
+    // one of them going stale is the same class of drift.
+    followers: [
+      '@vitest/browser',
+      '@vitest/expect',
+      '@vitest/mocker',
+      '@vitest/pretty-format',
+      '@vitest/runner',
+      '@vitest/snapshot',
+      '@vitest/spy',
+      '@vitest/utils',
+    ],
     issue: '#533',
   },
   // The Angular runtime + devkit peer-lock at an exact version:

@@ -181,14 +181,42 @@ const COMMON_ARGS_BLOCK = /export\s+const\s+COMMON_LAUNCH_ARGS\s*:[^=]*=\s*\[([\
  * Matches the provider factory call and captures the `args:` value, e.g.
  *   provider: playwright({ launchOptions: { args: [...A, ...B] } })
  *
- * Anchored on `provider:` deliberately. An unanchored `playwright(...)`
- * matcher would be satisfied by any such call in the file, so a future
- * config could leave an unused helper carrying the expected composition
- * while `makeBrowserConfig()` actually returned a different provider, and
- * this gate would still pass.
+ * Two anchors, both learned from false negatives:
+ *
+ *   - `(?<![\w$])` before `provider`, so `myprovider:` does not satisfy it.
+ *   - The caller runs this against `makeBrowserConfig`'s **body**, not the
+ *     whole file. Matching file-wide meant an unrelated object literal --
+ *     `const other = { provider: playwright({ ...correct... }) }` -- could
+ *     satisfy the gate while the helper actually returned a different
+ *     provider.
  */
 const PROVIDER_ARGS =
-  /provider\s*:\s*playwright\s*\(\s*\{[\s\S]*?launchOptions\s*:\s*\{[\s\S]*?args\s*:\s*\[([\s\S]*?)\][\s\S]*?\}[\s\S]*?\}\s*\)/d;
+  /(?<![\w$])provider\s*:\s*playwright\s*\(\s*\{[\s\S]*?launchOptions\s*:\s*\{[\s\S]*?args\s*:\s*\[([\s\S]*?)\][\s\S]*?\}[\s\S]*?\}\s*\)/d;
+
+/** Locates `function makeBrowserConfig(...)`, capturing up to its param list. */
+const MAKE_BROWSER_CONFIG = /(?<![\w$])(?:export\s+)?function\s+makeBrowserConfig\s*\(/d;
+
+/**
+ * Returns the source of `makeBrowserConfig`'s body, or `null` if it cannot
+ * be located.
+ *
+ * Scans the parameter list to its matching `)` (so a destructured or
+ * defaulted parameter containing brackets cannot end it early), then takes
+ * the next `{` as the body opener and scans to its match.
+ *
+ * @param code comment-stripped, literal-masked source
+ * @returns `{ body, start }` where `start` is the body's offset in `code`,
+ *   or `null` if the function cannot be located
+ */
+export function extractMakeBrowserConfigBody(code) {
+  const header = MAKE_BROWSER_CONFIG.exec(code);
+  if (!header) return null;
+  const paramsEnd = scanToMatchingBracket(code, header.index + header[0].length);
+  const bodyOpen = code.indexOf('{', paramsEnd);
+  if (bodyOpen === -1) return null;
+  const start = bodyOpen + 1;
+  return { body: code.slice(start, scanToMatchingBracket(code, start)), start };
+}
 
 /**
  * The exact `launchOptions.args` composition, after whitespace is stripped
@@ -335,9 +363,9 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
   const masked = maskStringLiterals(code);
   // `d` (hasIndices) gives exact capture-group offsets, which index the
   // unmasked `code` because masking preserves length.
-  const captured = (match, groupIndex) => {
+  const captured = (match, groupIndex, offset = 0) => {
     const span = match.indices?.[groupIndex];
-    return span ? code.slice(span[0], span[1]) : match[groupIndex];
+    return span ? code.slice(span[0] + offset, span[1] + offset) : match[groupIndex];
   };
 
   const argsBlock = COMMON_ARGS_BLOCK.exec(masked);
@@ -359,7 +387,15 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
     }
   }
 
-  const providerArgs = PROVIDER_ARGS.exec(masked);
+  const providerScope = extractMakeBrowserConfigBody(masked);
+  if (providerScope === null) {
+    violations.push(
+      `${path}: could not find a \`makeBrowserConfig(...)\` function to inspect. ` +
+        `All provider creation must funnel through it (PR #418).`,
+    );
+    return violations;
+  }
+  const providerArgs = PROVIDER_ARGS.exec(providerScope.body);
   if (!providerArgs) {
     violations.push(
       `${path}: could not find a \`provider: playwright({ launchOptions: { args: [...] } })\` ` +
@@ -367,7 +403,7 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
         `argument (re-verified against 4.1.11); any other placement is silently ignored.`,
     );
   } else {
-    const providerArgsBody = captured(providerArgs, 1);
+    const providerArgsBody = captured(providerArgs, 1, providerScope.start);
     const composition = providerArgsBody.replace(/\s+/g, '');
     if (!EXPECTED_COMPOSITION.test(composition)) {
       const missingCommon = !composition.includes('...COMMON_LAUNCH_ARGS');
@@ -408,7 +444,11 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
 
 /** Lints one config file for the `instances[].launch` regression shape. */
 export function lintInstancesLaunch(source, path) {
-  const hasLaunch = extractInstancesArrays(stripComments(source)).some((body) =>
+  // Literals are masked before extraction so a string-valued instance
+  // option whose *content* mentions `launch:` cannot be mistaken for a real
+  // property. Masking preserves quotes and length, so the extractor's own
+  // quote tracking and bracket depth still work.
+  const hasLaunch = extractInstancesArrays(maskStringLiterals(stripComments(source))).some((body) =>
     LAUNCH_KEY.test(body),
   );
   if (hasLaunch) {
