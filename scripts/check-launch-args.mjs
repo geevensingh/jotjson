@@ -154,15 +154,26 @@ const EXPECTED_COMPOSITION = /^\.\.\.COMMON_LAUNCH_ARGS,\.\.\.extraArgs,?$/;
 /**
  * Extracts the body of each `instances: [ ... ]` array literal.
  *
- * A regex cannot do this correctly. An earlier revision used
- * `/instances\s*:\s*\[[\s\S]*?\blaunch\s*:/`, whose `[\s\S]*?` is
- * unbounded: it happily runs past the array's closing `]` and matches an
- * unrelated later `launch:` property, rejecting a valid config. For a lint
- * gate that false positive is worse than the miss it was guarding against,
- * because it blocks correct work.
+ * A regex cannot do this correctly, in two separate ways, both of which
+ * produced false positives that would reject a valid config:
  *
- * This walks the source tracking bracket depth, skipping over string and
- * template literals so a `]` inside a string cannot end the array early.
+ *   1. An earlier revision used
+ *      `/instances\s*:\s*\[[\s\S]*?\blaunch\s*:/`, whose `[\s\S]*?` is
+ *      unbounded -- it ran past the array's closing `]` and matched an
+ *      unrelated later `launch:` property.
+ *   2. The revision after that found the opener with a plain regex, which
+ *      matched inside string and template literals. `stripComments`
+ *      deliberately preserves string contents, so a log message or error
+ *      string mentioning `instances: [{ launch: ... }]` was treated as a
+ *      real array.
+ *
+ * For a lint gate a false positive is worse than the miss it guards
+ * against, because it blocks correct work rather than merely failing to
+ * catch bad work. So this walks the source once, tracking quote state, and
+ * only recognises an opener while outside a literal. The body is then
+ * delimited by bracket depth, also skipping literals so a `]` inside a
+ * string cannot end the array early.
+ *
  * Input is expected to be comment-stripped already.
  *
  * @param code comment-stripped source
@@ -171,37 +182,80 @@ const EXPECTED_COMPOSITION = /^\.\.\.COMMON_LAUNCH_ARGS,\.\.\.extraArgs,?$/;
  */
 export function extractInstancesArrays(code) {
   const bodies = [];
-  const opener = /\binstances\s*:\s*\[/g;
-  let match;
-  while ((match = opener.exec(code)) !== null) {
-    const start = match.index + match[0].length;
-    let depth = 1;
-    let index = start;
-    let quote = null;
-    while (index < code.length && depth > 0) {
-      const char = code[index];
-      if (quote) {
-        if (char === '\\') {
-          index += 2;
-          continue;
-        }
-        if (char === quote) quote = null;
-      } else if (char === "'" || char === '"' || char === '`') {
-        quote = char;
-      } else if (char === '[' || char === '{' || char === '(') {
-        depth += 1;
-      } else if (char === ']' || char === '}' || char === ')') {
-        depth -= 1;
-        if (depth === 0) break;
+  // Sticky so it can be anchored at the cursor without slicing the source.
+  const opener = /instances\s*:\s*\[/y;
+  const isWordChar = (char) => char !== undefined && /[\w$]/.test(char);
+  let index = 0;
+  let quote = null;
+
+  while (index < code.length) {
+    const char = code[index];
+
+    if (quote) {
+      if (char === '\\') {
+        index += 2;
+        continue;
       }
+      if (char === quote) quote = null;
       index += 1;
+      continue;
     }
-    // Unbalanced (truncated or unparsable) source: take what is left rather
-    // than silently skipping, so a malformed config still gets scanned.
-    bodies.push(code.slice(start, index));
-    opener.lastIndex = Math.max(index, opener.lastIndex);
+
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+      index += 1;
+      continue;
+    }
+
+    // Only attempt a match at an identifier boundary, so `myinstances:`
+    // does not register as an opener.
+    if (char === 'i' && !isWordChar(code[index - 1])) {
+      opener.lastIndex = index;
+      const match = opener.exec(code);
+      if (match) {
+        const start = index + match[0].length;
+        const end = scanToMatchingBracket(code, start);
+        bodies.push(code.slice(start, end));
+        index = end;
+        continue;
+      }
+    }
+
+    index += 1;
   }
+
   return bodies;
+}
+
+/**
+ * Given an index just past an opening `[`, returns the index of its
+ * matching `]`, tracking nested brackets and skipping string and template
+ * literals. On unbalanced input returns the end of the source, so a
+ * malformed config still gets scanned rather than silently skipped.
+ */
+function scanToMatchingBracket(code, start) {
+  let depth = 1;
+  let index = start;
+  let quote = null;
+  while (index < code.length) {
+    const char = code[index];
+    if (quote) {
+      if (char === '\\') {
+        index += 2;
+        continue;
+      }
+      if (char === quote) quote = null;
+    } else if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+    } else if (char === '[' || char === '{' || char === '(') {
+      depth += 1;
+    } else if (char === ']' || char === '}' || char === ')') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+    index += 1;
+  }
+  return index;
 }
 
 /** Matches a `launch` key, whether written as `launch:` or `launch :`. */

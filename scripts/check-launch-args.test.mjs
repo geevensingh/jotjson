@@ -201,6 +201,49 @@ test('extractInstancesArrays returns one body per instances array', () => {
   assert.ok(!bodies[0].includes('x: 2'), 'first body must stop at its closing bracket');
 });
 
+// Regression: opener discovery used a plain regex, which matched inside
+// string literals. `stripComments` preserves string contents by design, so
+// a log message or error string quoting the shape looked like a real array.
+test('lintInstancesLaunch ignores the full violating shape inside a string literal', () => {
+  const source = [
+    "instances: [{ browser: 'chromium' }],",
+    '  onConsoleLog: (line) => {',
+    '    report("bad config: instances: [{ launch: { args: [] } }]");',
+    '  },',
+  ].join('\n');
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch ignores the shape inside a template literal', () => {
+  const source = [
+    "instances: [{ browser: 'chromium' }],",
+    '  message: `do not write instances: [{ launch: {} }] here`,',
+  ].join('\n');
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch still flags a real array that follows a quoted decoy', () => {
+  const source = [
+    'message: "instances: [{ launch: {} }]",',
+    "instances: [{ browser: 'chromium', launch: { args: [] } }],",
+  ].join('\n');
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+test('extractInstancesArrays does not treat a quoted opener as an array', () => {
+  assert.deepEqual(extractInstancesArrays('const s = "instances: [{ a: 1 }]";'), []);
+});
+
+test('extractInstancesArrays requires an identifier boundary', () => {
+  assert.deepEqual(extractInstancesArrays('myinstances: [{ a: 1 }]'), []);
+});
+
+test('extractInstancesArrays tolerates an unbalanced array', () => {
+  const bodies = extractInstancesArrays("instances: [{ browser: 'chromium' }");
+  assert.equal(bodies.length, 1);
+  assert.match(bodies[0], /chromium/);
+});
+
 test('parseArrayLiterals extracts single, double, and backtick literals', () => {
   assert.deepEqual(parseArrayLiterals(`'a', "b", \`c\``), ['a', 'b', 'c']);
 });
