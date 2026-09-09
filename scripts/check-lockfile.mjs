@@ -357,7 +357,16 @@ function printRegenerationSteps(workspace) {
   console.error(`    git add ${workspace.lockfile}`);
 }
 
-function printMetadataMessage(workspace, offenders) {
+/**
+ * Reports metadata offenders, split by `kind`.
+ *
+ * Exported for unit-testing: the two branches carry OPPOSITE remediations
+ * (regenerate vs. repair in place), and printing the regeneration recipe
+ * for a provenance failure would actively cause the version-floating harm
+ * AGENTS.md Section 7 #13 warns about. Asserting the offender `kind` alone
+ * does not catch that -- only reading the emitted text does.
+ */
+export function printMetadataMessage(workspace, offenders) {
   // Two failure shapes with OPPOSITE fixes share this reporter, so they are
   // reported separately. Missing metadata (issue #509) is repaired by
   // regenerating the lockfile from scratch. Invalid provenance or a weak

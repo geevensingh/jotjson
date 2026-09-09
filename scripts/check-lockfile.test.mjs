@@ -25,6 +25,7 @@ import {
   checkPeerLockedFamilies,
   checkVersionInSync,
   PEER_LOCKED_FAMILIES,
+  printMetadataMessage,
 } from './check-lockfile.mjs';
 
 /**
@@ -475,6 +476,81 @@ test('every committed lockfile entry resolves to the public registry with sha512
     const lock = JSON.parse(readFileSync(resolve(repoRoot, file), 'utf8'));
     assert.deepEqual(checkMetadataFields(lock), [], `${file} has metadata offenders`);
   }
+});
+
+// The two branches carry OPPOSITE remediations, and printing the
+// regeneration recipe for a provenance failure would cause the exact
+// version-floating harm the gate exists to prevent. Asserting `kind` alone
+// cannot catch that -- only reading the emitted text can.
+function captureStderr(run) {
+  const original = console.error;
+  const lines = [];
+  console.error = (...parts) => lines.push(parts.join(' '));
+  try {
+    run();
+  } finally {
+    console.error = original;
+  }
+  return lines.join('\n');
+}
+
+const WORKSPACE = { name: 'root', lockfile: 'package-lock.json', manifest: 'package.json' };
+const REGENERATION_RECIPE = /rm -rf node_modules|Remove-Item|--package-lock-only --ignore-scripts/;
+
+test('printMetadataMessage gives provenance failures in-place repair, never regeneration', () => {
+  const output = captureStderr(() =>
+    printMetadataMessage(WORKSPACE, [
+      {
+        path: 'node_modules/x',
+        kind: 'provenance',
+        reason: "`integrity` is 'sha1', expected 'sha512'",
+      },
+    ]),
+  );
+  assert.match(output, /invalid provenance\/digest/);
+  assert.match(output, /repair these entries IN PLACE/);
+  assert.match(output, /npm view <name>@<version> dist\.tarball dist\.integrity/);
+  assert.ok(
+    !REGENERATION_RECIPE.test(output),
+    `provenance guidance must not include the regeneration recipe:\n${output}`,
+  );
+  assert.ok(!/missing metadata/.test(output), 'must not print the missing-metadata header');
+});
+
+test('printMetadataMessage gives missing metadata the regeneration recipe', () => {
+  const output = captureStderr(() =>
+    printMetadataMessage(WORKSPACE, [
+      { path: 'node_modules/x', kind: 'missing', reason: 'missing `resolved` and `integrity`' },
+    ]),
+  );
+  assert.match(output, /missing metadata/);
+  assert.match(output, REGENERATION_RECIPE);
+  assert.ok(!/IN PLACE/.test(output), 'must not print the in-place guidance');
+});
+
+test('printMetadataMessage emits both sections for mixed failure kinds', () => {
+  const output = captureStderr(() =>
+    printMetadataMessage(WORKSPACE, [
+      { path: 'node_modules/a', kind: 'missing', reason: 'missing `integrity`' },
+      { path: 'node_modules/b', kind: 'provenance', reason: '`resolved` points elsewhere' },
+    ]),
+  );
+  assert.match(output, /missing metadata/);
+  assert.match(output, /invalid provenance\/digest/);
+  assert.match(output, REGENERATION_RECIPE);
+  assert.match(output, /repair these entries IN PLACE/);
+  assert.match(output, /node_modules\/a/);
+  assert.match(output, /node_modules\/b/);
+});
+
+test('printMetadataMessage treats an untagged offender as missing, not provenance', () => {
+  // Defensive: the reporter filters on `!== 'provenance'`, so a future kind
+  // surfaces with conservative advice rather than being dropped silently.
+  const output = captureStderr(() =>
+    printMetadataMessage(WORKSPACE, [{ path: 'node_modules/x', reason: 'no kind set' }]),
+  );
+  assert.match(output, /missing metadata/);
+  assert.match(output, /node_modules\/x/);
 });
 
 test('checkVersionInSync returns null when pkg and lock agree', () => {

@@ -2,52 +2,72 @@
 // Vitest Chromium launch-args composition lint (issue #533).
 //
 // Motivating incident: PR #418 tried to pass Chromium launch flags via
-// `instances[].launch.args`. `@vitest/browser-playwright` silently
-// ignores that field -- it reads launch options *only* from the
-// `playwright({ launchOptions: { args: [...] } })` factory argument,
-// which it spreads into the object handed to Playwright's `.launch()`.
-// Nothing errored; the flags simply never reached Chromium.
+// `instances[].launch.args`. `@vitest/browser-playwright` silently ignores
+// that field -- it reads launch options *only* from the
+// `playwright({ launchOptions: { args: [...] } })` factory argument, which
+// it spreads into the object handed to Playwright's `.launch()`. Nothing
+// errored; the flags simply never reached Chromium.
 //
 // Why this needs a gate rather than a comment or a runtime test:
 //
 //   1. The flags are UNOBSERVABLE where we run. Every CI job is a bare
-//      `runs-on: ubuntu-latest` VM with no `container:` key, running as
-//      the non-root `runner` user. There, `--no-sandbox` (needed for
+//      `runs-on: ubuntu-latest` VM with no `container:`, running as the
+//      non-root `runner` user. There, `--no-sandbox` (needed for
 //      root/containers), `--disable-dev-shm-usage` (needed for Docker's
 //      64MB /dev/shm), and `--disable-gpu` (redundant under
 //      `headless: true`) are all effectively inert. On Windows dev
 //      machines they are inert too. So a silent args-drop produces no
-//      failure anywhere -- until CI moves to a container or a root
-//      user, at which point it surfaces as intermittent Chromium
-//      crashes. Silent divergence with no detection mechanism.
+//      failure anywhere -- until CI moves to a container or a root user,
+//      at which point it surfaces as intermittent Chromium crashes.
 //
-//   2. A runtime assertion could only prove the CHANNEL, not the
-//      CONTENTS. Observing one flag's side effect (e.g. `window.gc`
-//      from `--js-flags=--expose-gc`) cannot distinguish
+//   2. A runtime assertion could only prove the CHANNEL, not the CONTENTS.
+//      Observing one flag's side effect (e.g. `window.gc` from
+//      `--js-flags=--expose-gc`) cannot distinguish
 //      `args: [...COMMON_LAUNCH_ARGS, ...extraArgs]` from
 //      `args: [...extraArgs]`. The head of the array is the
-//      CI-stability-critical part, and it has no in-page observable.
+//      CI-stability-critical part and has no in-page observable.
 //
-//   3. A static check costs milliseconds and needs no Chromium boot,
-//      so it can fail before the thing it checks has booted.
+//   3. A static check costs milliseconds and needs no Chromium boot, so it
+//      can fail before the thing it checks has booted.
 //
-// Three invariants, all read from `vitest.shared.mts`:
-//   1. `COMMON_LAUNCH_ARGS` declares exactly the expected flag set.
-//   2. `makeBrowserConfig` composes `launchOptions.args` as the spread
-//      `[...COMMON_LAUNCH_ARGS, ...extraArgs]` inside a `playwright({
-//      launchOptions: { args } })` factory call.
-//   3. No `vitest*.mts` reintroduces an `instances[].launch` field --
-//      the literal #418 regression.
+// WHY AN AST, NOT REGEXES. The first four revisions of this gate scanned
+// source text by hand and produced a false result in every round: a
+// `[\s\S]*?` that ran past the array's closing bracket; an opener matched
+// inside a string literal; a quoted decoy that satisfied the provider
+// check; a decoy declared inside the helper body; a decoy nested inside
+// the returned object; and an element list that ignored spreads. Each fix
+// added another lexer rule (comments, then strings, then regex literals)
+// and exposed the next gap. That is the wrong shape of solution: a
+// hand-rolled JavaScript lexer will keep losing to valid syntax it does
+// not model.
 //
-// Runtime proof that args actually reach Chromium lives where it
-// belongs: `ensureGc()` in `json-tree.component.perf.ts` throws if
+// `typescript` is already a direct devDependency, so the compiler's own
+// scanner and parser do the lexing exactly right -- comments, strings,
+// template literals, and regex literals all cease to be special cases --
+// and structural questions ("the TOP-LEVEL `provider` property of the
+// object this function RETURNS") become precise instead of approximate.
+// Cold import measured at ~236ms on Node 24, under the 500ms hysteresis
+// threshold documented in `check-tree-row-grid.mjs`, so this stays in the
+// `lint` chain. Re-measure with:
+//   node -e "const s=Date.now();import('typescript').then(()=>console.log(Date.now()-s))"
+//
+// Three invariants:
+//   1. `COMMON_LAUNCH_ARGS` is an array of exactly the expected string
+//      literals, in order, with no spreads or computed elements.
+//   2. The object returned by `makeBrowserConfig()` has a top-level
+//      `provider` of `playwright({ launchOptions: { args: [
+//      ...COMMON_LAUNCH_ARGS, ...extraArgs ] } })`, in that order.
+//   3. No `instances: [...]` entry carries a `launch` property -- the
+//      literal PR #418 regression.
+//
+// Runtime proof that args actually reach Chromium lives where it belongs:
+// `ensureGc()` in `json-tree.component.perf.ts` throws if
 // `--js-flags=--expose-gc` (passed via `extraArgs`) failed to arrive.
-// That covers the L2 perf bench; this gate covers the composition for
-// every harness, including the unit suite CI actually runs.
 
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -56,10 +76,10 @@ const repoRoot = resolve(scriptDir, '..');
  * The flag set `COMMON_LAUNCH_ARGS` must declare, in order.
  *
  * Changing this list is a deliberate act: update both this array and
- * `vitest.shared.mts`, and say why in the commit message. The gate
- * compares order-sensitively because the array is concatenated into a
- * flat argv, and Chromium honors the LAST occurrence of a repeated
- * switch -- so ordering is semantically load-bearing, not cosmetic.
+ * `vitest.shared.mts`, and say why in the commit message. The comparison
+ * is order-sensitive because the array is concatenated into a flat argv,
+ * and Chromium honors the LAST occurrence of a repeated switch -- so
+ * ordering is semantically load-bearing, not cosmetic.
  */
 export const EXPECTED_COMMON_LAUNCH_ARGS = [
   '--no-sandbox',
@@ -68,432 +88,280 @@ export const EXPECTED_COMMON_LAUNCH_ARGS = [
 ];
 
 const SHARED_CONFIG = 'vitest.shared.mts';
+const ARGS_CONST = 'COMMON_LAUNCH_ARGS';
+const HELPER = 'makeBrowserConfig';
+const EXTRA_ARGS_PARAM = 'extraArgs';
 
-/**
- * Strips `//` line comments and block comments so the matchers below
- * scan code only.
- *
- * This is load-bearing, not defensive: `vitest.shared.mts`'s own JSDoc
- * documents the correct shape by quoting it verbatim
- * (`playwright({ launchOptions: { args: [...] } })`), and an earlier
- * revision of this gate matched that prose instead of the real call.
- * A gate that can be satisfied -- or tripped -- by a comment is not a
- * gate.
- *
- * String-literal contents are preserved; the only sequences treated as
- * comment openers are ones outside a string or template literal.
- */
-export function stripComments(source) {
-  let out = '';
-  let index = 0;
-  let quote = null;
-  while (index < source.length) {
-    const char = source[index];
-    const next = source[index + 1];
-    if (quote) {
-      if (char === '\\') {
-        out += char + (next ?? '');
-        index += 2;
-        continue;
-      }
-      if (char === quote) quote = null;
-      out += char;
-      index += 1;
-      continue;
-    }
-    if (char === "'" || char === '"' || char === '`') {
-      quote = char;
-      out += char;
-      index += 1;
-      continue;
-    }
-    if (char === '/' && next === '/') {
-      while (index < source.length && source[index] !== '\n') index += 1;
-      continue;
-    }
-    if (char === '/' && next === '*') {
-      index += 2;
-      while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) {
-        // Preserve newlines so reported line numbers stay meaningful.
-        if (source[index] === '\n') out += '\n';
-        index += 1;
-      }
-      index += 2;
-      continue;
-    }
-    out += char;
-    index += 1;
-  }
-  return out;
+/** Parses a `.mts` source into a TypeScript AST. */
+function parse(source, fileName) {
+  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+}
+
+/** Name of a property-assignment key, or null for computed/spread keys. */
+function propertyName(node) {
+  if (!ts.isPropertyAssignment(node) && !ts.isShorthandPropertyAssignment(node)) return null;
+  const name = node.name;
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name)) return name.text;
+  return null;
+}
+
+/** Finds a top-level property of an object literal by name. */
+function findProperty(objectLiteral, name) {
+  if (!objectLiteral || !ts.isObjectLiteralExpression(objectLiteral)) return null;
+  return objectLiteral.properties.find((prop) => propertyName(prop) === name) ?? null;
+}
+
+/** Depth-first walk over every node in a tree. */
+function walk(node, visit) {
+  visit(node);
+  node.forEachChild((child) => walk(child, visit));
+}
+
+/** Renders an array element for a diagnostic without leaking whole files. */
+function describeElement(element) {
+  if (ts.isStringLiteral(element)) return `'${element.text}'`;
+  if (ts.isSpreadElement(element)) return `...${element.expression.getText()}`;
+  return element.getText();
 }
 
 /**
- * Replaces the *contents* of string and template literals with a filler
- * character, preserving the quotes and the exact length of the source.
+ * Reads the `COMMON_LAUNCH_ARGS` declaration.
  *
- * `stripComments` deliberately keeps string contents, because a config may
- * legitimately need them. But the structural matchers below are plain
- * regexes, so without masking, a quoted decoy like
- * `"provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } })"`
- * inside a log message would satisfy this gate even if the real provider
- * were missing or malformed -- a false negative in a guard whose whole job
- * is to notice that.
- *
- * Length is preserved so a match index in the masked text points at the
- * same offset in the original, letting the caller slice real content
- * (e.g. the actual flag literals) back out of the unmasked source.
+ * Every element must be a direct string literal. A spread or call
+ * expression would let the runtime array carry flags this gate never sees,
+ * so those are rejected rather than skipped -- the previous revision
+ * collected only quoted literals and silently ignored everything else.
  */
-export function maskStringLiterals(code) {
-  const chars = [...code];
-  let index = 0;
-  let quote = null;
-  while (index < chars.length) {
-    const char = chars[index];
-    if (quote) {
-      if (char === '\\') {
-        // Blank the escape pair so a `\"` cannot appear to close the string.
-        chars[index] = FILLER;
-        if (index + 1 < chars.length) chars[index + 1] = FILLER;
-        index += 2;
-        continue;
-      }
-      if (char === quote) {
-        quote = null;
-      } else if (char !== '\n') {
-        chars[index] = FILLER;
-      }
-      index += 1;
-      continue;
+function checkCommonArgs(sourceFile, path, violations) {
+  let declaration = null;
+  walk(sourceFile, (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === ARGS_CONST
+    ) {
+      declaration = node;
     }
-    if (char === "'" || char === '"' || char === '`') quote = char;
-    index += 1;
-  }
-  return chars.join('');
-}
+  });
 
-/** Neutral stand-in for masked literal contents; matches none of the patterns below. */
-const FILLER = '\u0000';
-
-/** Matches the `export const COMMON_LAUNCH_ARGS ... = [ ... ];` block. */
-const COMMON_ARGS_BLOCK = /export\s+const\s+COMMON_LAUNCH_ARGS\s*:[^=]*=\s*\[([\s\S]*?)\]\s*;/d;
-
-/**
- * Matches the provider factory call and captures the `args:` value, e.g.
- *   provider: playwright({ launchOptions: { args: [...A, ...B] } })
- *
- * Two anchors, both learned from false negatives:
- *
- *   - `(?<![\w$])` before `provider`, so `myprovider:` does not satisfy it.
- *   - The caller runs this against `makeBrowserConfig`'s **body**, not the
- *     whole file. Matching file-wide meant an unrelated object literal --
- *     `const other = { provider: playwright({ ...correct... }) }` -- could
- *     satisfy the gate while the helper actually returned a different
- *     provider.
- */
-const PROVIDER_ARGS =
-  /(?<![\w$])provider\s*:\s*playwright\s*\(\s*\{[\s\S]*?launchOptions\s*:\s*\{[\s\S]*?args\s*:\s*\[([\s\S]*?)\][\s\S]*?\}[\s\S]*?\}\s*\)/d;
-
-/** Locates `function makeBrowserConfig(...)`, capturing up to its param list. */
-const MAKE_BROWSER_CONFIG = /(?<![\w$])(?:export\s+)?function\s+makeBrowserConfig\s*\(/d;
-
-/**
- * Returns the source of `makeBrowserConfig`'s body, or `null` if it cannot
- * be located.
- *
- * Scans the parameter list to its matching `)` (so a destructured or
- * defaulted parameter containing brackets cannot end it early), then takes
- * the next `{` as the body opener and scans to its match.
- *
- * @param code comment-stripped, literal-masked source
- * @returns `{ body, start }` where `start` is the body's offset in `code`,
- *   or `null` if the function cannot be located
- */
-export function extractMakeBrowserConfigBody(code) {
-  const header = MAKE_BROWSER_CONFIG.exec(code);
-  if (!header) return null;
-  const paramsEnd = scanToMatchingBracket(code, header.index + header[0].length);
-  const bodyOpen = code.indexOf('{', paramsEnd);
-  if (bodyOpen === -1) return null;
-  const start = bodyOpen + 1;
-  return { body: code.slice(start, scanToMatchingBracket(code, start)), start };
-}
-
-/**
- * Returns the object literal `makeBrowserConfig` actually returns, plus its
- * offset in the full source.
- *
- * Scoping to the function body was not enough: a decoy *inside* the body --
- * `const unused = { provider: playwright({ ...correct... }) };` followed by
- * `return { provider: someOtherProvider() };` -- still satisfied the gate
- * while the returned provider dropped the launch args. The invariant is
- * about what the helper hands to Vitest, so the match has to be anchored to
- * the returned object and nothing else.
- *
- * @param body comment-stripped, literal-masked function body
- * @param bodyStart offset of `body` within the full source
- * @returns `{ body, start }` for the returned object, or `null`
- */
-export function extractReturnedObject(body, bodyStart = 0) {
-  const returnKeyword = /(?<![\w$])return\s*\{/.exec(body);
-  if (!returnKeyword) return null;
-  const start = returnKeyword.index + returnKeyword[0].length;
-  return {
-    body: body.slice(start, scanToMatchingBracket(body, start)),
-    start: bodyStart + start,
-  };
-}
-
-/**
- * The exact `launchOptions.args` composition, after whitespace is stripped
- * (a trailing comma is allowed).
- *
- * Order is load-bearing, not cosmetic: `args` is a flat argv, and Chromium
- * honors the LAST occurrence of a repeated switch. `COMMON_LAUNCH_ARGS` is
- * the shared baseline and `extraArgs` is the per-harness override, so
- * `extraArgs` must come second or a caller could not override a baseline
- * flag. An earlier revision of this gate tested for the two spreads
- * independently, which accepted `[...extraArgs, ...COMMON_LAUNCH_ARGS]`
- * and any duplicate or additional entry.
- */
-const EXPECTED_COMPOSITION = /^\.\.\.COMMON_LAUNCH_ARGS,\.\.\.extraArgs,?$/;
-
-/**
- * Extracts the body of each `instances: [ ... ]` array literal.
- *
- * A regex cannot do this correctly, in two separate ways, both of which
- * produced false positives that would reject a valid config:
- *
- *   1. An earlier revision used
- *      `/instances\s*:\s*\[[\s\S]*?\blaunch\s*:/`, whose `[\s\S]*?` is
- *      unbounded -- it ran past the array's closing `]` and matched an
- *      unrelated later `launch:` property.
- *   2. The revision after that found the opener with a plain regex, which
- *      matched inside string and template literals. `stripComments`
- *      deliberately preserves string contents, so a log message or error
- *      string mentioning `instances: [{ launch: ... }]` was treated as a
- *      real array.
- *
- * For a lint gate a false positive is worse than the miss it guards
- * against, because it blocks correct work rather than merely failing to
- * catch bad work. So this walks the source once, tracking quote state, and
- * only recognises an opener while outside a literal. The body is then
- * delimited by bracket depth, also skipping literals so a `]` inside a
- * string cannot end the array early.
- *
- * Input is expected to be comment-stripped already.
- *
- * @param code comment-stripped source
- * @returns one entry per `instances:` array, each the text between its
- *   outermost brackets
- */
-export function extractInstancesArrays(code) {
-  const bodies = [];
-  // Sticky so it can be anchored at the cursor without slicing the source.
-  const opener = /instances\s*:\s*\[/y;
-  const isWordChar = (char) => char !== undefined && /[\w$]/.test(char);
-  let index = 0;
-  let quote = null;
-
-  while (index < code.length) {
-    const char = code[index];
-
-    if (quote) {
-      if (char === '\\') {
-        index += 2;
-        continue;
-      }
-      if (char === quote) quote = null;
-      index += 1;
-      continue;
-    }
-
-    if (char === "'" || char === '"' || char === '`') {
-      quote = char;
-      index += 1;
-      continue;
-    }
-
-    // Only attempt a match at an identifier boundary, so `myinstances:`
-    // does not register as an opener.
-    if (char === 'i' && !isWordChar(code[index - 1])) {
-      opener.lastIndex = index;
-      const match = opener.exec(code);
-      if (match) {
-        const start = index + match[0].length;
-        const end = scanToMatchingBracket(code, start);
-        bodies.push(code.slice(start, end));
-        index = end;
-        continue;
-      }
-    }
-
-    index += 1;
-  }
-
-  return bodies;
-}
-
-/**
- * Given an index just past an opening `[`, returns the index of its
- * matching `]`, tracking nested brackets and skipping string and template
- * literals. On unbalanced input returns the end of the source, so a
- * malformed config still gets scanned rather than silently skipped.
- */
-function scanToMatchingBracket(code, start) {
-  let depth = 1;
-  let index = start;
-  let quote = null;
-  while (index < code.length) {
-    const char = code[index];
-    if (quote) {
-      if (char === '\\') {
-        index += 2;
-        continue;
-      }
-      if (char === quote) quote = null;
-    } else if (char === "'" || char === '"' || char === '`') {
-      quote = char;
-    } else if (char === '[' || char === '{' || char === '(') {
-      depth += 1;
-    } else if (char === ']' || char === '}' || char === ')') {
-      depth -= 1;
-      if (depth === 0) return index;
-    }
-    index += 1;
-  }
-  return index;
-}
-
-/** Matches a `launch` key, whether written as `launch:` or `launch :`. */
-const LAUNCH_KEY = /\blaunch\s*:/;
-
-/** Parses the string-literal entries out of a captured array body. */
-export function parseArrayLiterals(body) {
-  return [...body.matchAll(/['"`]([^'"`]+)['"`]/g)].map((match) => match[1]);
-}
-
-/**
- * Lints the shared-config source text. Returns an array of violation
- * strings; empty means clean.
- *
- * @param source contents of `vitest.shared.mts`
- * @param path display path used in messages
- */
-export function lintSharedConfig(source, path = SHARED_CONFIG) {
-  const violations = [];
-  const code = stripComments(source);
-  // Structural matching runs against masked literals so a quoted decoy
-  // cannot satisfy the gate. Lengths are preserved, so a capture group's
-  // offsets index the unmasked `code` for the real content.
-  const masked = maskStringLiterals(code);
-  // `d` (hasIndices) gives exact capture-group offsets, which index the
-  // unmasked `code` because masking preserves length.
-  const captured = (match, groupIndex, offset = 0) => {
-    const span = match.indices?.[groupIndex];
-    return span ? code.slice(span[0] + offset, span[1] + offset) : match[groupIndex];
-  };
-
-  const argsBlock = COMMON_ARGS_BLOCK.exec(masked);
-  if (!argsBlock) {
+  if (!declaration || !declaration.initializer) {
     violations.push(
-      `${path}: could not find an \`export const COMMON_LAUNCH_ARGS ... = [ ... ];\` declaration. ` +
+      `${path}: could not find a \`${ARGS_CONST}\` declaration with an initializer. ` +
         `The launch-args funnel is the PR #418 regression guard; do not remove or rename it.`,
     );
-  } else {
-    const declared = parseArrayLiterals(captured(argsBlock, 1));
-    const expected = EXPECTED_COMMON_LAUNCH_ARGS;
-    if (declared.length !== expected.length || declared.some((flag, i) => flag !== expected[i])) {
-      violations.push(
-        `${path}: COMMON_LAUNCH_ARGS is [${declared.join(', ')}] but expected ` +
-          `[${expected.join(', ')}]. If this change is deliberate, update ` +
-          `EXPECTED_COMMON_LAUNCH_ARGS in scripts/check-launch-args.mjs in the same commit ` +
-          `and explain why in the commit message.`,
-      );
-    }
+    return;
+  }
+  if (!ts.isArrayLiteralExpression(declaration.initializer)) {
+    violations.push(`${path}: \`${ARGS_CONST}\` must be an array literal.`);
+    return;
   }
 
-  const helperBody = extractMakeBrowserConfigBody(masked);
-  if (helperBody === null) {
+  const elements = declaration.initializer.elements;
+  const nonLiteral = elements.filter((element) => !ts.isStringLiteral(element));
+  if (nonLiteral.length > 0) {
     violations.push(
-      `${path}: could not find a \`makeBrowserConfig(...)\` function to inspect. ` +
+      `${path}: \`${ARGS_CONST}\` must contain only direct string literals, but found ` +
+        `${nonLiteral.map(describeElement).join(', ')}. A spread or expression can add ` +
+        `flags at runtime that this gate cannot see.`,
+    );
+    return;
+  }
+
+  const declared = elements.map((element) => element.text);
+  const expected = EXPECTED_COMMON_LAUNCH_ARGS;
+  if (declared.length !== expected.length || declared.some((flag, i) => flag !== expected[i])) {
+    violations.push(
+      `${path}: ${ARGS_CONST} is [${declared.join(', ')}] but expected [${expected.join(', ')}]. ` +
+        `If this change is deliberate, update EXPECTED_COMMON_LAUNCH_ARGS in ` +
+        `scripts/check-launch-args.mjs in the same commit and explain why in the commit message.`,
+    );
+  }
+}
+
+/** Locates the object literal returned by `makeBrowserConfig`. */
+function findReturnedObject(sourceFile) {
+  let helper = null;
+  walk(sourceFile, (node) => {
+    const isFn =
+      (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) &&
+      node.name &&
+      node.name.text === HELPER;
+    const isArrow =
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === HELPER &&
+      node.initializer &&
+      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer));
+    if (isFn) helper = node;
+    else if (isArrow) helper = node.initializer;
+  });
+  if (!helper) return { helper: null, returned: null };
+
+  // Arrow shorthand: `(args) => ({ ... })`
+  if (ts.isArrowFunction(helper) && helper.body && !ts.isBlock(helper.body)) {
+    const body = ts.isParenthesizedExpression(helper.body) ? helper.body.expression : helper.body;
+    return { helper, returned: ts.isObjectLiteralExpression(body) ? body : null };
+  }
+
+  let returned = null;
+  const body = helper.body;
+  if (body && ts.isBlock(body)) {
+    for (const statement of body.statements) {
+      if (!ts.isReturnStatement(statement) || !statement.expression) continue;
+      const expression = ts.isParenthesizedExpression(statement.expression)
+        ? statement.expression.expression
+        : statement.expression;
+      if (ts.isObjectLiteralExpression(expression)) returned = expression;
+    }
+  }
+  return { helper, returned };
+}
+
+/**
+ * Checks the provider on the object `makeBrowserConfig` returns.
+ *
+ * Anchored to the TOP-LEVEL `provider` property of the RETURNED object.
+ * Earlier revisions matched file-wide, then function-body-wide, then
+ * returned-object-wide; each accepted a decoy that satisfied the pattern
+ * somewhere other than the property Vitest actually consumes.
+ */
+function checkProvider(sourceFile, path, violations) {
+  const { helper, returned } = findReturnedObject(sourceFile);
+  if (!helper) {
+    violations.push(
+      `${path}: could not find a \`${HELPER}(...)\` function to inspect. ` +
         `All provider creation must funnel through it (PR #418).`,
     );
-    return violations;
+    return;
   }
-  const providerScope = extractReturnedObject(helperBody.body, helperBody.start);
-  if (providerScope === null) {
+  if (!returned) {
     violations.push(
-      `${path}: \`makeBrowserConfig(...)\` does not return an object literal, so the ` +
-        `provider it hands to Vitest cannot be verified.`,
+      `${path}: \`${HELPER}(...)\` does not return an object literal, so the provider it ` +
+        `hands to Vitest cannot be verified.`,
     );
-    return violations;
-  }
-  const providerArgs = PROVIDER_ARGS.exec(providerScope.body);
-  if (!providerArgs) {
-    violations.push(
-      `${path}: the object returned by \`makeBrowserConfig(...)\` has no ` +
-        `\`provider: playwright({ launchOptions: { args: [...] } })\`. ` +
-        `@vitest/browser-playwright reads launch options ONLY from this factory ` +
-        `argument (re-verified against 4.1.11); any other placement is silently ignored.`,
-    );
-  } else {
-    const providerArgsBody = captured(providerArgs, 1, providerScope.start);
-    const composition = providerArgsBody.replace(/\s+/g, '');
-    if (!EXPECTED_COMPOSITION.test(composition)) {
-      const missingCommon = !composition.includes('...COMMON_LAUNCH_ARGS');
-      const missingExtra = !composition.includes('...extraArgs');
-      let why;
-      if (missingCommon && missingExtra) {
-        why =
-          'it spreads neither COMMON_LAUNCH_ARGS nor extraArgs. Dropping the ' +
-          'baseline silently strips --no-sandbox / --disable-gpu / ' +
-          '--disable-dev-shm-usage from every browser run, with no test failure ' +
-          'on GitHub-hosted VM runners.';
-      } else if (missingCommon) {
-        why =
-          'it does not spread COMMON_LAUNCH_ARGS. That silently strips ' +
-          '--no-sandbox / --disable-gpu / --disable-dev-shm-usage from every ' +
-          'browser run, with no test failure on GitHub-hosted VM runners.';
-      } else if (missingExtra) {
-        why =
-          'it does not spread extraArgs. The L2 perf bench passes ' +
-          '--js-flags=--expose-gc through that parameter; dropping it breaks ensureGc().';
-      } else {
-        why =
-          'the spreads are out of order or carry extra entries. `args` is a flat ' +
-          'argv and Chromium honors the LAST occurrence of a repeated switch, so ' +
-          'COMMON_LAUNCH_ARGS must come first and extraArgs must come second -- ' +
-          'otherwise a harness cannot override a baseline flag.';
-      }
-      violations.push(
-        `${path}: the provider's \`launchOptions.args\` must be exactly ` +
-          `\`[...COMMON_LAUNCH_ARGS, ...extraArgs]\`, but ${why} ` +
-          `Found \`[${providerArgsBody.trim()}]\`.`,
-      );
-    }
+    return;
   }
 
+  const providerProp = findProperty(returned, 'provider');
+  if (!providerProp || !ts.isPropertyAssignment(providerProp)) {
+    violations.push(
+      `${path}: the object returned by \`${HELPER}(...)\` has no top-level \`provider\` property.`,
+    );
+    return;
+  }
+
+  const call = providerProp.initializer;
+  if (
+    !ts.isCallExpression(call) ||
+    !ts.isIdentifier(call.expression) ||
+    call.expression.text !== 'playwright'
+  ) {
+    violations.push(
+      `${path}: the returned \`provider\` must be a \`playwright({ ... })\` call, but is ` +
+        `\`${call.getText().split('\n')[0]}\`. @vitest/browser-playwright reads launch options ` +
+        `ONLY from that factory argument (re-verified against 4.1.11).`,
+    );
+    return;
+  }
+
+  const launchOptions = findProperty(call.arguments[0], 'launchOptions');
+  const argsProp =
+    launchOptions && ts.isPropertyAssignment(launchOptions)
+      ? findProperty(launchOptions.initializer, 'args')
+      : null;
+  if (!argsProp || !ts.isPropertyAssignment(argsProp)) {
+    violations.push(
+      `${path}: the returned \`provider: playwright(...)\` call has no ` +
+        `\`launchOptions.args\`, so no launch flags reach Chromium.`,
+    );
+    return;
+  }
+  if (!ts.isArrayLiteralExpression(argsProp.initializer)) {
+    violations.push(`${path}: \`launchOptions.args\` must be an array literal.`);
+    return;
+  }
+
+  const elements = argsProp.initializer.elements;
+  const isSpreadOf = (element, name) =>
+    ts.isSpreadElement(element) &&
+    ts.isIdentifier(element.expression) &&
+    element.expression.text === name;
+  const correct =
+    elements.length === 2 &&
+    isSpreadOf(elements[0], ARGS_CONST) &&
+    isSpreadOf(elements[1], EXTRA_ARGS_PARAM);
+
+  if (!correct) {
+    const found = elements.map(describeElement).join(', ');
+    const hasCommon = elements.some((element) => isSpreadOf(element, ARGS_CONST));
+    const hasExtra = elements.some((element) => isSpreadOf(element, EXTRA_ARGS_PARAM));
+    let why;
+    if (!hasCommon && !hasExtra) {
+      why =
+        `it spreads neither ${ARGS_CONST} nor ${EXTRA_ARGS_PARAM}. Dropping the baseline ` +
+        `silently strips --no-sandbox / --disable-gpu / --disable-dev-shm-usage from every ` +
+        `browser run, with no test failure on GitHub-hosted VM runners.`;
+    } else if (!hasCommon) {
+      why =
+        `it does not spread ${ARGS_CONST}. That silently strips --no-sandbox / ` +
+        `--disable-gpu / --disable-dev-shm-usage from every browser run, with no test ` +
+        `failure on GitHub-hosted VM runners.`;
+    } else if (!hasExtra) {
+      why =
+        `it does not spread ${EXTRA_ARGS_PARAM}. The L2 perf bench passes ` +
+        `--js-flags=--expose-gc through that parameter; dropping it breaks ensureGc().`;
+    } else {
+      why =
+        `the spreads are out of order or carry extra entries. \`args\` is a flat argv and ` +
+        `Chromium honors the LAST occurrence of a repeated switch, so ${ARGS_CONST} must come ` +
+        `first and ${EXTRA_ARGS_PARAM} second -- otherwise a harness cannot override a baseline flag.`;
+    }
+    violations.push(
+      `${path}: the returned provider's \`launchOptions.args\` must be exactly ` +
+        `\`[...${ARGS_CONST}, ...${EXTRA_ARGS_PARAM}]\`, but ${why} Found \`[${found}]\`.`,
+    );
+  }
+}
+
+/** Lints the shared-config source text. */
+export function lintSharedConfig(source, path = SHARED_CONFIG) {
+  const violations = [];
+  const sourceFile = parse(source, path);
+  checkCommonArgs(sourceFile, path, violations);
+  checkProvider(sourceFile, path, violations);
   return violations;
 }
 
-/** Lints one config file for the `instances[].launch` regression shape. */
+/**
+ * Lints one config file for the `instances[].launch` regression shape.
+ *
+ * Deliberately conservative: a `launch` key anywhere inside an `instances`
+ * array entry is a violation, not just at the entry's top level. The field
+ * is silently ignored wherever it appears, so flagging the whole subtree is
+ * the tripwire PR #418 warranted.
+ */
 export function lintInstancesLaunch(source, path) {
-  // Literals are masked before extraction so a string-valued instance
-  // option whose *content* mentions `launch:` cannot be mistaken for a real
-  // property. Masking preserves quotes and length, so the extractor's own
-  // quote tracking and bracket depth still work.
-  const hasLaunch = extractInstancesArrays(maskStringLiterals(stripComments(source))).some((body) =>
-    LAUNCH_KEY.test(body),
-  );
-  if (hasLaunch) {
-    return [
-      `${path}: found a \`launch\` field inside an \`instances: [...]\` entry. ` +
-        `@vitest/browser-playwright silently ignores it (PR #418). Pass launch ` +
-        `flags through makeBrowserConfig()'s extraArgs parameter instead, which ` +
-        `funnels them into the playwright({ launchOptions: { args } }) factory.`,
-    ];
-  }
-  return [];
+  const sourceFile = parse(source, path);
+  let found = false;
+
+  walk(sourceFile, (node) => {
+    if (found) return;
+    if (!ts.isPropertyAssignment(node) || propertyName(node) !== 'instances') return;
+    if (!ts.isArrayLiteralExpression(node.initializer)) return;
+    for (const entry of node.initializer.elements) {
+      walk(entry, (inner) => {
+        if (propertyName(inner) === 'launch') found = true;
+      });
+    }
+  });
+
+  if (!found) return [];
+  return [
+    `${path}: found a \`launch\` field inside an \`instances: [...]\` entry. ` +
+      `@vitest/browser-playwright silently ignores it (PR #418). Pass launch flags through ` +
+      `${HELPER}()'s ${EXTRA_ARGS_PARAM} parameter instead, which funnels them into the ` +
+      `playwright({ launchOptions: { args } }) factory.`,
+  ];
 }
 
 /** Returns the repo-root `vitest*.mts` config filenames, sorted. */
@@ -519,11 +387,9 @@ export function lintRepo(root = repoRoot) {
   violations.push(
     ...lintSharedConfig(readFileSync(resolve(root, SHARED_CONFIG), 'utf8'), SHARED_CONFIG),
   );
-
   for (const name of configs) {
     violations.push(...lintInstancesLaunch(readFileSync(resolve(root, name), 'utf8'), name));
   }
-
   return { violations, scanned: configs.length };
 }
 

@@ -1,535 +1,307 @@
 // Tests for scripts/check-launch-args.mjs. Run via
 // `node --test scripts/check-launch-args.test.mjs` or
 // `npm run test:scripts`.
+//
+// The gate parses with the TypeScript compiler rather than scanning text,
+// so most of these cases are regressions from the four regex-based
+// revisions that preceded it -- each one accepted or rejected valid source
+// that a real parser handles for free.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   EXPECTED_COMMON_LAUNCH_ARGS,
-  extractInstancesArrays,
-  extractMakeBrowserConfigBody,
-  extractReturnedObject,
   lintInstancesLaunch,
   lintRepo,
   lintSharedConfig,
   listVitestConfigs,
-  maskStringLiterals,
-  parseArrayLiterals,
-  stripComments,
 } from './check-launch-args.mjs';
 
-/** A minimal source that satisfies every invariant. */
-function goodSource({
-  args = EXPECTED_COMMON_LAUNCH_ARGS,
-  composition = '...COMMON_LAUNCH_ARGS, ...extraArgs',
-} = {}) {
-  return `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-${args.map((flag) => `  '${flag}',`).join('\n')}
-];
+const ARGS_DECL = [
+  'export const COMMON_LAUNCH_ARGS: readonly string[] = [',
+  ...EXPECTED_COMMON_LAUNCH_ARGS.map((flag) => `  '${flag}',`),
+  '];',
+].join('\n');
 
-export function makeBrowserConfig(extraArgs = [], overrides = {}) {
-  return {
-    enabled: true,
-    provider: playwright({
-      launchOptions: {
-        args: [${composition}],
-      },
-    }),
-    instances: [{ browser: 'chromium' }],
-    ...overrides,
-  };
-}
-`;
+const GOOD_RETURN =
+  'return { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };';
+
+/** Builds a shared-config source with a custom helper body. */
+function helper(body, argsDecl = ARGS_DECL) {
+  return [argsDecl, 'export function makeBrowserConfig(extraArgs = []) {', `  ${body}`, '}'].join(
+    '\n',
+  );
 }
 
 test('clean source produces no violations', () => {
-  assert.deepEqual(lintSharedConfig(goodSource()), []);
+  assert.deepEqual(lintSharedConfig(helper(GOOD_RETURN)), []);
 });
 
+test('accepts an arrow helper with a parenthesized object body', () => {
+  const source = [
+    ARGS_DECL,
+    'export const makeBrowserConfig = (extraArgs = []) => ({',
+    '  provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }),',
+    '});',
+  ].join('\n');
+  assert.deepEqual(lintSharedConfig(source), []);
+});
+
+// ---- COMMON_LAUNCH_ARGS -----------------------------------------------
+
 test('flags a missing COMMON_LAUNCH_ARGS declaration', () => {
-  const source = goodSource().replace(/export const COMMON_LAUNCH_ARGS[\s\S]*?\];/, '');
+  const source = helper(GOOD_RETURN, '');
   const violations = lintSharedConfig(source);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /could not find an .*COMMON_LAUNCH_ARGS/);
+  assert.ok(violations.some((v) => /could not find a .*COMMON_LAUNCH_ARGS/.test(v)));
 });
 
 test('flags a dropped flag', () => {
-  const violations = lintSharedConfig(goodSource({ args: ['--no-sandbox', '--disable-gpu'] }));
+  const decl = "export const COMMON_LAUNCH_ARGS = ['--no-sandbox', '--disable-gpu'];";
+  const violations = lintSharedConfig(helper(GOOD_RETURN, decl));
   assert.equal(violations.length, 1);
-  assert.match(violations[0], /but expected/);
   assert.match(violations[0], /--disable-dev-shm-usage/);
 });
 
 test('flags a reordered flag list (argv order is load-bearing)', () => {
-  const reordered = ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'];
-  const violations = lintSharedConfig(goodSource({ args: reordered }));
+  const decl =
+    "export const COMMON_LAUNCH_ARGS = ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'];";
+  const violations = lintSharedConfig(helper(GOOD_RETURN, decl));
   assert.equal(violations.length, 1);
   assert.match(violations[0], /but expected/);
 });
 
 test('flags an added unexpected flag', () => {
-  const extra = [...EXPECTED_COMMON_LAUNCH_ARGS, '--single-process'];
-  const violations = lintSharedConfig(goodSource({ args: extra }));
+  const decl =
+    "export const COMMON_LAUNCH_ARGS = ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--single-process'];";
+  const violations = lintSharedConfig(helper(GOOD_RETURN, decl));
   assert.equal(violations.length, 1);
   assert.match(violations[0], /--single-process/);
 });
 
-test('flags a dropped COMMON_LAUNCH_ARGS spread -- the silent-strip regression', () => {
-  const violations = lintSharedConfig(goodSource({ composition: '...extraArgs' }));
+// A spread lets the runtime array carry flags the gate never sees. The
+// previous revision collected only quoted literals and ignored the rest.
+test('flags a spread inside COMMON_LAUNCH_ARGS', () => {
+  const decl =
+    "export const COMMON_LAUNCH_ARGS = ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', ...MORE_FLAGS];";
+  const violations = lintSharedConfig(helper(GOOD_RETURN, decl));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /only direct string literals/);
+  assert.match(violations[0], /\.\.\.MORE_FLAGS/);
+});
+
+test('flags a function call inside COMMON_LAUNCH_ARGS', () => {
+  const decl =
+    "export const COMMON_LAUNCH_ARGS = ['--no-sandbox', '--disable-gpu', computeFlag()];";
+  const violations = lintSharedConfig(helper(GOOD_RETURN, decl));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /only direct string literals/);
+});
+
+test('flags a non-array COMMON_LAUNCH_ARGS', () => {
+  const violations = lintSharedConfig(helper(GOOD_RETURN, 'export const COMMON_LAUNCH_ARGS = x;'));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /must be an array literal/);
+});
+
+// ---- the returned provider --------------------------------------------
+
+test('flags a reversed composition', () => {
+  const body =
+    'return { provider: playwright({ launchOptions: { args: [...extraArgs, ...COMMON_LAUNCH_ARGS] } }) };';
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /out of order or carry extra entries/);
+});
+
+test('flags a dropped COMMON_LAUNCH_ARGS spread', () => {
+  const body = 'return { provider: playwright({ launchOptions: { args: [...extraArgs] } }) };';
+  const violations = lintSharedConfig(helper(body));
   assert.equal(violations.length, 1);
   assert.match(violations[0], /does not spread COMMON_LAUNCH_ARGS/);
 });
 
 test('flags a dropped extraArgs spread -- breaks ensureGc()', () => {
-  const violations = lintSharedConfig(goodSource({ composition: '...COMMON_LAUNCH_ARGS' }));
+  const body =
+    'return { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS] } }) };';
+  const violations = lintSharedConfig(helper(body));
   assert.equal(violations.length, 1);
   assert.match(violations[0], /does not spread extraArgs/);
 });
 
-// Order is load-bearing: `args` is a flat argv and Chromium honors the last
-// occurrence of a repeated switch, so extraArgs must be appended, not
-// prepended. An earlier revision tested for the two spreads independently
-// and accepted this.
-test('flags a reversed composition even though both spreads are present', () => {
-  const violations = lintSharedConfig(
-    goodSource({ composition: '...extraArgs, ...COMMON_LAUNCH_ARGS' }),
-  );
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /out of order or carry extra entries/);
-});
-
-test('flags a duplicated spread', () => {
-  const violations = lintSharedConfig(
-    goodSource({ composition: '...COMMON_LAUNCH_ARGS, ...COMMON_LAUNCH_ARGS, ...extraArgs' }),
-  );
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /out of order or carry extra entries/);
-});
-
-test('flags an extra inline entry smuggled into the composition', () => {
-  const violations = lintSharedConfig(
-    goodSource({ composition: "...COMMON_LAUNCH_ARGS, '--single-process', ...extraArgs" }),
-  );
+test('flags an extra inline entry in the composition', () => {
+  const body =
+    "return { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, '--x', ...extraArgs] } }) };";
+  const violations = lintSharedConfig(helper(body));
   assert.equal(violations.length, 1);
   assert.match(violations[0], /out of order or carry extra entries/);
 });
 
 test('flags an empty args array', () => {
-  const violations = lintSharedConfig(goodSource({ composition: '' }));
+  const body = 'return { provider: playwright({ launchOptions: { args: [] } }) };';
+  const violations = lintSharedConfig(helper(body));
   assert.equal(violations.length, 1);
   assert.match(violations[0], /spreads neither/);
 });
 
-test('accepts a trailing comma in the composition', () => {
-  assert.deepEqual(
-    lintSharedConfig(goodSource({ composition: '...COMMON_LAUNCH_ARGS, ...extraArgs,' })),
-    [],
-  );
-});
-
-test('flags a missing playwright() factory call', () => {
-  const source = goodSource().replace(
-    /provider: playwright\([\s\S]*?\}\),/,
-    'provider: someOtherProvider(),',
-  );
-  const violations = lintSharedConfig(source);
-  assert.ok(violations.some((v) => /object returned by/.test(v)));
-});
-
-test('accepts whitespace and newline variation inside the factory call', () => {
-  const source = goodSource({
-    composition: '\n        ...COMMON_LAUNCH_ARGS,\n        ...extraArgs,\n      ',
-  });
-  assert.deepEqual(lintSharedConfig(source), []);
-});
-
-// stripComments keeps string contents by design, so the structural matchers
-// run against masked literals. Without that, a quoted decoy satisfies the
-// gate while the real provider is broken -- a false negative in the guard.
-test('a quoted decoy cannot satisfy the provider check', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-
-export function makeBrowserConfig(extraArgs = []) {
-  const help = "provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } })";
-  return { provider: somethingElse(), help };
-}
-`;
-  const violations = lintSharedConfig(source);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /object returned by/);
-});
-
-test('a quoted decoy cannot mask a reversed real composition', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-
-export function makeBrowserConfig(extraArgs = []) {
-  const doc = \`provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } })\`;
-  return {
-    provider: playwright({ launchOptions: { args: [...extraArgs, ...COMMON_LAUNCH_ARGS] } }),
-    doc,
-  };
-}
-`;
-  const violations = lintSharedConfig(source);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /out of order or carry extra entries/);
-});
-
-// An unanchored playwright(...) matcher would be satisfied by an unused
-// helper while makeBrowserConfig actually returned a different provider.
-test('an unused helper with the right shape does not satisfy the gate', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-
-const unused = playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } });
-
-export function makeBrowserConfig(extraArgs = []) {
-  return { provider: webdriverio({ launchOptions: { args: [] } }) };
-}
-`;
-  const violations = lintSharedConfig(source);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /object returned by/);
-});
-
-// The test above uses a decoy with no `provider:` key, so it did not cover
-// the real false negative: an unrelated object literal that *does* use
-// `provider:` while makeBrowserConfig returns something else. The check is
-// now scoped to makeBrowserConfig's body.
-test('an unused object literal with a correct provider does not satisfy the gate', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-
-const other = { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };
-
-export function makeBrowserConfig(extraArgs = []) {
-  return { provider: somethingElse() };
-}
-`;
-  const violations = lintSharedConfig(source);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /object returned by/);
-});
-
-test('`myprovider:` does not satisfy the provider anchor', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-
-export function makeBrowserConfig(extraArgs = []) {
-  return { myprovider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };
-}
-`;
-  const violations = lintSharedConfig(source);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /object returned by/);
-});
-
 test('flags a missing makeBrowserConfig helper outright', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-`;
-  const violations = lintSharedConfig(source);
+  const violations = lintSharedConfig(ARGS_DECL);
   assert.equal(violations.length, 1);
   assert.match(violations[0], /could not find a .*makeBrowserConfig/);
 });
 
-test('extractMakeBrowserConfigBody survives brackets in the parameter list', () => {
-  const code = 'function makeBrowserConfig(extraArgs = [], overrides = {}) { return MARKER; }';
-  const scope = extractMakeBrowserConfigBody(code);
-  assert.ok(scope, 'expected a body');
-  assert.match(scope.body, /MARKER/);
-  assert.equal(code.slice(scope.start, scope.start + scope.body.length), scope.body);
-});
-
-// Scoping to the function body was still too loose: a decoy declared inside
-// the body satisfied the gate while the RETURNED provider dropped the args.
-test('an in-helper decoy does not satisfy the gate when the return drops the args', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-
-export function makeBrowserConfig(extraArgs = []) {
-  const unused = { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };
-  return { provider: someOtherProvider() };
-}
-`;
-  const violations = lintSharedConfig(source);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /object returned by/);
-});
-
-test('an in-helper decoy cannot mask a reversed composition in the returned object', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-
-export function makeBrowserConfig(extraArgs = []) {
-  const unused = { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };
-  return { provider: playwright({ launchOptions: { args: [...extraArgs, ...COMMON_LAUNCH_ARGS] } }) };
-}
-`;
-  const violations = lintSharedConfig(source);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /out of order or carry extra entries/);
-});
-
 test('flags a helper that returns no object literal', () => {
-  const source = `
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-
-export function makeBrowserConfig(extraArgs = []) {
-  return buildConfig(extraArgs);
-}
-`;
-  const violations = lintSharedConfig(source);
+  const violations = lintSharedConfig(helper('return buildConfig(extraArgs);'));
   assert.equal(violations.length, 1);
   assert.match(violations[0], /does not return an object literal/);
 });
 
-test('extractReturnedObject captures only the returned object', () => {
-  const body = 'const unused = { a: 1 };\n  return { b: 2, c: [3] };';
-  const returned = extractReturnedObject(body, 100);
-  assert.ok(returned, 'expected a returned object');
-  assert.match(returned.body, /b: 2/);
-  assert.ok(!returned.body.includes('a: 1'), 'must not include the local declaration');
-  assert.equal(
-    body.slice(returned.start - 100, returned.start - 100 + returned.body.length),
-    returned.body,
-  );
+test('flags a returned object with no provider property', () => {
+  const violations = lintSharedConfig(helper('return { headless: true };'));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /no top-level `provider` property/);
 });
 
-// The extractor was string-aware, but the launch-key test then ran against
-// the raw body, so a string *containing* `launch:` was reported as a real
-// property.
-test('lintInstancesLaunch ignores `launch:` inside a string-valued instance option', () => {
-  const source = "instances: [{ browser: 'chromium', note: 'do not use launch: here' }],";
+test('flags a provider that is not a playwright() call', () => {
+  const violations = lintSharedConfig(helper('return { provider: webdriverio({}) };'));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /must be a `playwright\(\{ \.\.\. \}\)` call/);
+});
+
+test('flags a playwright() call with no launchOptions.args', () => {
+  const violations = lintSharedConfig(helper('return { provider: playwright({}) };'));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /no `launchOptions.args`/);
+});
+
+// ---- decoys (regressions from the regex-based revisions) ---------------
+
+test('a quoted decoy cannot satisfy the provider check', () => {
+  const body = [
+    'const help = "provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } })";',
+    '  return { provider: somethingElse(), help };',
+  ].join('\n');
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /must be a `playwright/);
+});
+
+test('an unused helper with the right shape does not satisfy the gate', () => {
+  const source = [
+    ARGS_DECL,
+    'const unused = playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } });',
+    'export function makeBrowserConfig(extraArgs = []) {',
+    '  return { provider: webdriverio({ launchOptions: { args: [] } }) };',
+    '}',
+  ].join('\n');
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /must be a `playwright/);
+});
+
+test('an in-helper decoy does not satisfy the gate', () => {
+  const body = [
+    'const unused = { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };',
+    '  return { provider: someOtherProvider() };',
+  ].join('\n');
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /must be a `playwright/);
+});
+
+// The returned object itself can carry a nested decoy: only the TOP-LEVEL
+// `provider` is the property Vitest consumes.
+test('a nested provider inside the returned object does not satisfy the gate', () => {
+  const body = [
+    'return {',
+    '    options: { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) },',
+    '    provider: someOtherProvider(),',
+    '  };',
+  ].join('\n');
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /must be a `playwright/);
+});
+
+test('`myprovider:` does not satisfy the provider check', () => {
+  const body =
+    'return { myprovider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };';
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /no top-level `provider` property/);
+});
+
+// ---- instances[].launch ------------------------------------------------
+
+test('lintInstancesLaunch accepts an instances entry with no launch field', () => {
+  const source = "const c = { instances: [{ browser: 'chromium' }] };";
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch flags the PR #418 regression shape', () => {
+  const source = "const c = { instances: [{ browser: 'chromium', launch: { args: [] } }] };";
+  const violations = lintInstancesLaunch(source, 'x.mts');
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /PR #418/);
+});
+
+test('lintInstancesLaunch flags launch nested deeper inside the array', () => {
+  const source = "const c = { instances: [{ browser: 'chromium', opts: { launch: {} } }] };";
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+test('lintInstancesLaunch ignores a launch key AFTER the instances array closes', () => {
+  const source =
+    "const c = { instances: [{ browser: 'chromium' }], server: { launch: 'unrelated' } };";
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch ignores `launch:` inside a string-valued option', () => {
+  const source =
+    "const c = { instances: [{ browser: 'chromium', note: 'do not use launch: here' }] };";
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch ignores the shape inside a template literal', () => {
+  const source =
+    "const c = { instances: [{ browser: 'chromium' }], msg: `write instances: [{ launch: {} }] never` };";
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+// A regex literal is neither a string nor a comment, so a hand-rolled
+// scanner treated its contents as code.
+test('lintInstancesLaunch ignores the shape inside a regex literal', () => {
+  const source = [
+    'const pattern = /instances: [{ launch: {} }]/;',
+    "const c = { instances: [{ browser: 'chromium' }] };",
+  ].join('\n');
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch ignores a commented-out launch', () => {
+  const source = "// instances: [{ browser: 'chromium', launch: { args: [] } }],";
   assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
 });
 
 test('lintInstancesLaunch still flags a real launch beside a string decoy', () => {
   const source =
-    "instances: [{ browser: 'chromium', note: 'launch: mentioned', launch: { args: [] } }],";
+    "const c = { instances: [{ browser: 'chromium', note: 'launch: mentioned', launch: { args: [] } }] };";
   assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
-});
-
-test('the real flag literals are still read through the mask', () => {
-  // Masking preserves length, so capture offsets index the unmasked source.
-  // If that slicing were wrong, the declared flags would read as empty and
-  // this would report a mismatch instead of passing.
-  assert.deepEqual(lintSharedConfig(goodSource()), []);
-  const violations = lintSharedConfig(goodSource({ args: ['--no-sandbox', '--disable-gpu'] }));
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /--disable-dev-shm-usage/);
-});
-
-test('maskStringLiterals preserves length and blanks only literal contents', () => {
-  const source = `const a = "hello"; const b = 1;`;
-  const masked = maskStringLiterals(source);
-  assert.equal(masked.length, source.length);
-  assert.ok(!masked.includes('hello'), 'literal content should be masked');
-  assert.ok(masked.includes('const b = 1;'), 'code outside literals is untouched');
-});
-
-test('maskStringLiterals is not fooled by an escaped quote', () => {
-  const source = 'const a = "he\\"llo world"; const b = 2;';
-  const masked = maskStringLiterals(source);
-  assert.equal(masked.length, source.length);
-  assert.ok(!masked.includes('world'), 'escaped quote must not end the literal early');
-  assert.ok(masked.includes('const b = 2;'));
-});
-
-test('lintInstancesLaunch accepts an instances entry with no launch field', () => {
-  assert.deepEqual(lintInstancesLaunch(goodSource(), 'vitest.config.mts'), []);
-});
-
-test('lintInstancesLaunch flags the PR #418 regression shape', () => {
-  const source = `
-  instances: [{ browser: 'chromium', launch: { args: ['--no-sandbox'] } }],
-`;
-  const violations = lintInstancesLaunch(source, 'vitest.config.mts');
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /instances/);
-  assert.match(violations[0], /PR #418/);
-});
-
-test('lintInstancesLaunch flags `launch :` with stray whitespace', () => {
-  const source = `instances: [{ browser: 'chromium', launch : {} }],`;
-  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
-});
-
-// Regression: the first revision matched with an unbounded `[\s\S]*?`, which
-// ran past the array's closing `]` and flagged an unrelated later `launch:`.
-// A false positive in a lint gate blocks valid work, which is worse than the
-// miss it guards against.
-test('lintInstancesLaunch ignores a launch key AFTER the instances array closes', () => {
-  const source = [
-    "instances: [{ browser: 'chromium' }],",
-    '  onConsoleLog: () => {},',
-    "  server: { launch: 'unrelated property' },",
-  ].join('\n');
-  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
-});
-
-test('lintInstancesLaunch still flags launch nested deeper inside the array', () => {
-  const source = "instances: [{ browser: 'chromium', opts: { launch: { args: [] } } }],";
-  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
-});
-
-test('lintInstancesLaunch is not fooled by a bracket inside a string literal', () => {
-  const source = ["instances: [{ browser: 'chrom]ium' }],", "  other: { launch: 'x' },"].join('\n');
-  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
 });
 
 test('lintInstancesLaunch scans every instances array, not just the first', () => {
   const source = [
-    "instances: [{ browser: 'chromium' }],",
-    'other: 1,',
-    "instances: [{ browser: 'firefox', launch: {} }],",
+    "const a = { instances: [{ browser: 'chromium' }] };",
+    "const b = { instances: [{ browser: 'firefox', launch: {} }] };",
   ].join('\n');
   assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
 });
 
-test('extractInstancesArrays returns one body per instances array', () => {
-  const bodies = extractInstancesArrays(
-    'instances: [{ a: 1 }], x: 2, instances: [{ b: [3, 4] }], y: 3',
-  );
-  assert.equal(bodies.length, 2);
-  assert.match(bodies[0], /a: 1/);
-  assert.match(bodies[1], /b: \[3, 4\]/);
-  assert.ok(!bodies[0].includes('x: 2'), 'first body must stop at its closing bracket');
-});
-
-// Regression: opener discovery used a plain regex, which matched inside
-// string literals. `stripComments` preserves string contents by design, so
-// a log message or error string quoting the shape looked like a real array.
-test('lintInstancesLaunch ignores the full violating shape inside a string literal', () => {
-  const source = [
-    "instances: [{ browser: 'chromium' }],",
-    '  onConsoleLog: (line) => {',
-    '    report("bad config: instances: [{ launch: { args: [] } }]");',
-    '  },',
-  ].join('\n');
-  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
-});
-
-test('lintInstancesLaunch ignores the shape inside a template literal', () => {
-  const source = [
-    "instances: [{ browser: 'chromium' }],",
-    '  message: `do not write instances: [{ launch: {} }] here`,',
-  ].join('\n');
-  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
-});
-
-test('lintInstancesLaunch still flags a real array that follows a quoted decoy', () => {
-  const source = [
-    'message: "instances: [{ launch: {} }]",',
-    "instances: [{ browser: 'chromium', launch: { args: [] } }],",
-  ].join('\n');
-  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
-});
-
-test('extractInstancesArrays does not treat a quoted opener as an array', () => {
-  assert.deepEqual(extractInstancesArrays('const s = "instances: [{ a: 1 }]";'), []);
-});
-
-test('extractInstancesArrays requires an identifier boundary', () => {
-  assert.deepEqual(extractInstancesArrays('myinstances: [{ a: 1 }]'), []);
-});
-
-test('extractInstancesArrays tolerates an unbalanced array', () => {
-  const bodies = extractInstancesArrays("instances: [{ browser: 'chromium' }");
-  assert.equal(bodies.length, 1);
-  assert.match(bodies[0], /chromium/);
-});
-
-test('parseArrayLiterals extracts single, double, and backtick literals', () => {
-  assert.deepEqual(parseArrayLiterals(`'a', "b", \`c\``), ['a', 'b', 'c']);
-});
-
-// Regression: the first revision of this gate matched the shape quoted
-// in `vitest.shared.mts`'s own JSDoc instead of the real factory call,
-// and reported a false violation against a clean repo.
-test('ignores a correct-looking shape quoted in a block comment', () => {
-  const source = `
-/**
- * Launch options are read only from the
- * \`playwright({ launchOptions: { args: [...] } })\` factory argument.
- */
-export const COMMON_LAUNCH_ARGS: readonly string[] = [
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-];
-export function makeBrowserConfig(extraArgs = []) {
-  return {
-    provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }),
-  };
-}
-`;
-  assert.deepEqual(lintSharedConfig(source), []);
-});
-
-test('a commented-out instances[].launch does not trip the #418 guard', () => {
-  const source = `// instances: [{ browser: 'chromium', launch: { args: [] } }],`;
-  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
-});
-
-test('stripComments removes comments but preserves string contents', () => {
-  assert.equal(stripComments(`const a = 1; // trailing`).trim(), 'const a = 1;');
-  assert.equal(stripComments(`/* block */const b = 2;`).trim(), 'const b = 2;');
-  assert.equal(stripComments(`const url = 'http://x/y';`).trim(), `const url = 'http://x/y';`);
-  assert.equal(
-    stripComments(`const s = "a /* not a comment */ b";`).trim(),
-    `const s = "a /* not a comment */ b";`,
-  );
-});
-
-test('stripComments preserves newlines so line numbers stay meaningful', () => {
-  const stripped = stripComments('a\n/* one\ntwo\nthree */\nb');
-  assert.equal(stripped.split('\n').length, 5);
-});
+// ---- repo wiring -------------------------------------------------------
 
 test('listVitestConfigs finds the real repo configs including the shared substrate', () => {
   const configs = listVitestConfigs();
-  assert.ok(configs.includes('vitest.shared.mts'), 'expected vitest.shared.mts');
-  assert.ok(configs.includes('vitest.config.mts'), 'expected vitest.config.mts');
-  assert.ok(configs.includes('vitest.perf.config.mts'), 'expected vitest.perf.config.mts');
+  for (const name of ['vitest.shared.mts', 'vitest.config.mts', 'vitest.perf.config.mts']) {
+    assert.ok(configs.includes(name), `expected ${name}`);
+  }
 });
 
 test('the real repo passes every invariant', () => {

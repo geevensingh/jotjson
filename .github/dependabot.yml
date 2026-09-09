@@ -110,8 +110,27 @@ updates:
         patterns:
           - 'vitest'
           - '@vitest/*'
-      # dev-minor catches everything else dev-typed; keep @angular and
-      # @vitest packages out so they always route to the groups above.
+      # playwright + @playwright/test are exact-linked rather than
+      # peer-locked: @playwright/test depends on `playwright` at an exact
+      # version, which depends on `playwright-core` at an exact version. A
+      # partial bump nests a duplicate copy, so the lockstep requirement is
+      # the same and docs/supply-chain.md's rule applies: family group,
+      # dev-minor exclusion, and a PEER_LOCKED_FAMILIES assertion.
+      #
+      # This family also determines the Chromium binary the Vitest
+      # browser-mode suite runs against, because
+      # .github/actions/install-playwright-chromium derives its cache key
+      # from the resolved root `playwright` version and is used by both the
+      # e2e job and the web unit tests. #537 tracks moving it; grouping
+      # means that move arrives as one mergeable PR rather than a split
+      # family rejected after the fact.
+      playwright:
+        patterns:
+          - 'playwright'
+          - '@playwright/test'
+      # dev-minor catches everything else dev-typed; keep @angular,
+      # @vitest, and playwright packages out so they always route to the
+      # family groups above.
       dev-minor:
         dependency-type: development
         update-types:
@@ -122,6 +141,8 @@ updates:
           - '@angular-devkit/*'
           - 'vitest'
           - '@vitest/*'
+          - 'playwright'
+          - '@playwright/test'
 
   - package-ecosystem: npm
     directory: /api
