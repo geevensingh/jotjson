@@ -219,6 +219,31 @@ export function extractMakeBrowserConfigBody(code) {
 }
 
 /**
+ * Returns the object literal `makeBrowserConfig` actually returns, plus its
+ * offset in the full source.
+ *
+ * Scoping to the function body was not enough: a decoy *inside* the body --
+ * `const unused = { provider: playwright({ ...correct... }) };` followed by
+ * `return { provider: someOtherProvider() };` -- still satisfied the gate
+ * while the returned provider dropped the launch args. The invariant is
+ * about what the helper hands to Vitest, so the match has to be anchored to
+ * the returned object and nothing else.
+ *
+ * @param body comment-stripped, literal-masked function body
+ * @param bodyStart offset of `body` within the full source
+ * @returns `{ body, start }` for the returned object, or `null`
+ */
+export function extractReturnedObject(body, bodyStart = 0) {
+  const returnKeyword = /(?<![\w$])return\s*\{/.exec(body);
+  if (!returnKeyword) return null;
+  const start = returnKeyword.index + returnKeyword[0].length;
+  return {
+    body: body.slice(start, scanToMatchingBracket(body, start)),
+    start: bodyStart + start,
+  };
+}
+
+/**
  * The exact `launchOptions.args` composition, after whitespace is stripped
  * (a trailing comma is allowed).
  *
@@ -387,19 +412,28 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
     }
   }
 
-  const providerScope = extractMakeBrowserConfigBody(masked);
-  if (providerScope === null) {
+  const helperBody = extractMakeBrowserConfigBody(masked);
+  if (helperBody === null) {
     violations.push(
       `${path}: could not find a \`makeBrowserConfig(...)\` function to inspect. ` +
         `All provider creation must funnel through it (PR #418).`,
     );
     return violations;
   }
+  const providerScope = extractReturnedObject(helperBody.body, helperBody.start);
+  if (providerScope === null) {
+    violations.push(
+      `${path}: \`makeBrowserConfig(...)\` does not return an object literal, so the ` +
+        `provider it hands to Vitest cannot be verified.`,
+    );
+    return violations;
+  }
   const providerArgs = PROVIDER_ARGS.exec(providerScope.body);
   if (!providerArgs) {
     violations.push(
-      `${path}: could not find a \`provider: playwright({ launchOptions: { args: [...] } })\` ` +
-        `factory call. @vitest/browser-playwright reads launch options ONLY from this factory ` +
+      `${path}: the object returned by \`makeBrowserConfig(...)\` has no ` +
+        `\`provider: playwright({ launchOptions: { args: [...] } })\`. ` +
+        `@vitest/browser-playwright reads launch options ONLY from this factory ` +
         `argument (re-verified against 4.1.11); any other placement is silently ignored.`,
     );
   } else {

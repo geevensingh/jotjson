@@ -250,6 +250,36 @@ test('the playwright family is pinned in lockstep, guarding the CI Chromium vers
   assert.match(problems[0], /^playwright family: resolved versions diverge/);
 });
 
+// @angular-devkit/build-angular pins these at the family version and neither
+// is a root declaration, so a partial bump of one would otherwise slip past.
+test('the angular family asserts its same-version devkit followers', () => {
+  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular');
+  assert.deepEqual([...family.followers].sort(), ['@angular-devkit/core', '@angular/build']);
+
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  lock.packages['node_modules/@angular/build'].version = '21.3.0';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /@angular\/build@21\.3\.0/);
+});
+
+// The 0.MMmm.pp devkit packages are exact-pinned but on a different
+// numbering, so they are deliberately excluded from a gate that asserts one
+// shared version per family. Pin that decision so it is not "fixed" by
+// adding them, which would fail on a correct lockfile.
+test('the angular family excludes the 0.x-mapped devkit packages', () => {
+  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular');
+  for (const name of ['@angular-devkit/architect', '@angular-devkit/build-webpack']) {
+    assert.ok(
+      !family.followers.includes(name),
+      `${name} uses the 0.x mapping and must be excluded`,
+    );
+  }
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  assert.match(lock.packages['node_modules/@angular-devkit/architect'].version, /^0\./);
+});
+
 test('checkPeerLockedFamilies flags a partial Angular-family bump', () => {
   const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
   const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
@@ -393,16 +423,31 @@ test('checkMetadataFields tags missing vs provenance offenders distinctly', () =
 test('checkMetadataFields still allows file: and git+ sources', () => {
   assert.deepEqual(
     checkMetadataFields(
-      lockWithEntry({ version: '1.0.0', resolved: 'file:../local', integrity: 'sha512-abc==' }),
-    ),
-    [],
-  );
-  assert.deepEqual(
-    checkMetadataFields(
       lockWithEntry({
         version: '1.0.0',
         resolved: 'git+ssh://git@github.com/o/r.git#' + 'a'.repeat(40),
       }),
+    ),
+    [],
+  );
+});
+
+// A real `file:` entry carries no integrity -- npm has no tarball to hash.
+// The exemption previously sat only in the provenance block, which runs
+// AFTER the integrity requirement, so every genuine local dependency was
+// reported as missing metadata. The old test hid this by giving its
+// synthetic `file:` entry a sha512 that no real one has.
+test('checkMetadataFields exempts a file: source that has no integrity', () => {
+  assert.deepEqual(
+    checkMetadataFields(lockWithEntry({ version: '1.0.0', resolved: 'file:../local-pkg' })),
+    [],
+  );
+});
+
+test('checkMetadataFields exempts a file: source that does carry integrity', () => {
+  assert.deepEqual(
+    checkMetadataFields(
+      lockWithEntry({ version: '1.0.0', resolved: 'file:../local', integrity: 'sha512-abc==' }),
     ),
     [],
   );

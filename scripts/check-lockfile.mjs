@@ -220,6 +220,15 @@ export function checkMetadataFields(lock) {
       continue;
     }
 
+    // `file:` sources: a local path, so there is no tarball to hash and no
+    // host to check. This exemption must come BEFORE the integrity
+    // requirement below -- npm records no `integrity` for a local path, so
+    // checking integrity first reported every real `file:` dependency as
+    // missing metadata. (The earlier revision had the exemption only in the
+    // provenance block further down, and its test used a synthetic `file:`
+    // entry that carried a sha512, which no real one does.)
+    if (/^file:/.test(resolved)) continue;
+
     if (!hasIntegrity) {
       offenders.push({ path, kind: 'missing', reason: 'missing `integrity`' });
       continue;
@@ -244,67 +253,67 @@ export function checkMetadataFields(lock) {
     // degrades from sha512 to sha1. CI still passed, because the proxy was
     // publicly reachable; the damage was reproducibility, provenance, and
     // digest strength, none of which any existing gate checked.
-    if (!/^file:/.test(resolved)) {
-      let url = null;
-      try {
-        url = new URL(resolved);
-      } catch {
-        // Deliberately does NOT echo `resolved`. A malformed value can
-        // still contain a token, and this reason string lands in public CI
-        // logs. `path` already tells the reader which entry to open.
-        offenders.push({
-          path,
-          kind: 'provenance',
-          reason: '`resolved` is not a parsable URL',
-        });
-        continue;
-      }
-      if (url.host !== PUBLIC_REGISTRY_HOST) {
-        offenders.push({
-          path,
-          kind: 'provenance',
-          reason:
-            `\`resolved\` points at '${url.host}', not '${PUBLIC_REGISTRY_HOST}'. ` +
-            `If this came from a corporate mirror, re-resolve with ` +
-            `\`--registry=https://${PUBLIC_REGISTRY_HOST}/\`. Remote tarballs from ` +
-            `other hosts are not allowed: Dependabot and npm audit cannot see them.`,
-        });
-        continue;
-      }
-      // Host alone is not provenance. `http://` downgrades the fetch to
-      // cleartext, and embedded credentials would be committed in plain
-      // text to a public repo -- both while naming the right host.
-      if (url.protocol !== 'https:') {
-        offenders.push({
-          path,
-          kind: 'provenance',
-          reason: `\`resolved\` uses '${url.protocol}//', expected 'https://'`,
-        });
-        continue;
-      }
-      if (url.username !== '' || url.password !== '') {
-        offenders.push({
-          path,
-          kind: 'provenance',
-          reason: '`resolved` embeds credentials in the URL; strip the userinfo component',
-        });
-        continue;
-      }
-      // A query string or fragment is the other place a token can hide
-      // (`...x-1.0.0.tgz?token=...`), and it clears the host, scheme, and
-      // userinfo checks above. Registry tarball URLs are plain paths, so
-      // anything here is unexpected. The value is not echoed, for the same
-      // reason as the parse-failure branch.
-      if (url.search !== '' || url.hash !== '') {
-        offenders.push({
-          path,
-          kind: 'provenance',
-          reason:
-            '`resolved` carries a query string or fragment; registry tarball URLs are ' +
-            'plain paths, and these can smuggle a credential',
-        });
-        continue;
-      }
+    // Every remaining entry is a registry tarball: `link`, `inBundle`, git,
+    // and `file:` have all been handled above.
+    let url = null;
+    try {
+      url = new URL(resolved);
+    } catch {
+      // Deliberately does NOT echo `resolved`. A malformed value can
+      // still contain a token, and this reason string lands in public CI
+      // logs. `path` already tells the reader which entry to open.
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason: '`resolved` is not a parsable URL',
+      });
+      continue;
+    }
+    if (url.host !== PUBLIC_REGISTRY_HOST) {
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason:
+          `\`resolved\` points at '${url.host}', not '${PUBLIC_REGISTRY_HOST}'. ` +
+          `If this came from a corporate mirror, re-resolve with ` +
+          `\`--registry=https://${PUBLIC_REGISTRY_HOST}/\`. Remote tarballs from ` +
+          `other hosts are not allowed: Dependabot and npm audit cannot see them.`,
+      });
+      continue;
+    }
+    // Host alone is not provenance. `http://` downgrades the fetch to
+    // cleartext, and embedded credentials would be committed in plain
+    // text to a public repo -- both while naming the right host.
+    if (url.protocol !== 'https:') {
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason: `\`resolved\` uses '${url.protocol}//', expected 'https://'`,
+      });
+      continue;
+    }
+    if (url.username !== '' || url.password !== '') {
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason: '`resolved` embeds credentials in the URL; strip the userinfo component',
+      });
+      continue;
+    }
+    // A query string or fragment is the other place a token can hide
+    // (`...x-1.0.0.tgz?token=...`), and it clears the host, scheme, and
+    // userinfo checks above. Registry tarball URLs are plain paths, so
+    // anything here is unexpected. The value is not echoed, for the same
+    // reason as the parse-failure branch.
+    if (url.search !== '' || url.hash !== '') {
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason:
+          '`resolved` carries a query string or fragment; registry tarball URLs are ' +
+          'plain paths, and these can smuggle a credential',
+      });
+      continue;
     }
 
     // Digest strength. npm accepts sha1 for backwards compatibility, but
@@ -419,10 +428,21 @@ function printMetadataMessage(workspace, offenders) {
  * partial bump from ANY inbound path.
  *
  * `declared` are the root devDependencies whose ranges must match.
- * `followers` are transitive packages pinned exactly by a declared
- * member -- they are not in `package.json` at all, which is exactly why
- * they need asserting: `@vitest/browser` carried two critical
- * advisories (issue #533) while being invisible on the manifest.
+ * `followers` are transitive packages pinned exactly by a declared member
+ * **at the family's own version** -- they are not in `package.json` at all,
+ * which is exactly why they need asserting: `@vitest/browser` carried two
+ * critical advisories (issue #533) while being invisible on the manifest.
+ *
+ * The "at the family's own version" qualifier is load-bearing. Some
+ * transitives are exact-pinned but on a *different* numbering: the Angular
+ * devkit pins `@angular-devkit/architect` and `@angular-devkit/build-webpack`
+ * at `0.2102.22` while the family itself is at `21.2.22`. That is the
+ * long-standing Angular `0.MMmm.pp` scheme, not drift. This gate asserts
+ * one shared version per family, so those two are deliberately out of
+ * scope rather than silently missed; asserting them would need a
+ * version-mapping mechanism nothing else here requires, and the family
+ * already moves as a single Dependabot group. `@angular-devkit/core` and
+ * `@angular/build` *are* pinned at `21.2.22`, so they are listed.
  *
  * See docs/supply-chain.md -> "Peer-locked dependency families".
  */
@@ -476,7 +496,10 @@ export const PEER_LOCKED_FAMILIES = [
       '@angular/cli',
       '@angular-devkit/build-angular',
     ],
-    followers: [],
+    // Pinned by @angular-devkit/build-angular at the family version, and
+    // absent from package.json. The `0.2102.22`-mapped devkit packages are
+    // excluded by design -- see the version-mapping note above.
+    followers: ['@angular-devkit/core', '@angular/build'],
   },
   // Material and CDK peer-lock to each other exactly but ship on their own
   // release cadence, which is why dependabot.yml carves them out of the

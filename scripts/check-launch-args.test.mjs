@@ -7,6 +7,7 @@ import {
   EXPECTED_COMMON_LAUNCH_ARGS,
   extractInstancesArrays,
   extractMakeBrowserConfigBody,
+  extractReturnedObject,
   lintInstancesLaunch,
   lintRepo,
   lintSharedConfig,
@@ -132,7 +133,7 @@ test('flags a missing playwright() factory call', () => {
     'provider: someOtherProvider(),',
   );
   const violations = lintSharedConfig(source);
-  assert.ok(violations.some((v) => /could not find a .*playwright\(/.test(v)));
+  assert.ok(violations.some((v) => /object returned by/.test(v)));
 });
 
 test('accepts whitespace and newline variation inside the factory call', () => {
@@ -160,7 +161,7 @@ export function makeBrowserConfig(extraArgs = []) {
 `;
   const violations = lintSharedConfig(source);
   assert.equal(violations.length, 1);
-  assert.match(violations[0], /could not find a .*provider: playwright/);
+  assert.match(violations[0], /object returned by/);
 });
 
 test('a quoted decoy cannot mask a reversed real composition', () => {
@@ -202,7 +203,7 @@ export function makeBrowserConfig(extraArgs = []) {
 `;
   const violations = lintSharedConfig(source);
   assert.equal(violations.length, 1);
-  assert.match(violations[0], /could not find a .*provider: playwright/);
+  assert.match(violations[0], /object returned by/);
 });
 
 // The test above uses a decoy with no `provider:` key, so it did not cover
@@ -225,7 +226,7 @@ export function makeBrowserConfig(extraArgs = []) {
 `;
   const violations = lintSharedConfig(source);
   assert.equal(violations.length, 1);
-  assert.match(violations[0], /could not find a .*provider: playwright/);
+  assert.match(violations[0], /object returned by/);
 });
 
 test('`myprovider:` does not satisfy the provider anchor', () => {
@@ -242,7 +243,7 @@ export function makeBrowserConfig(extraArgs = []) {
 `;
   const violations = lintSharedConfig(source);
   assert.equal(violations.length, 1);
-  assert.match(violations[0], /could not find a .*provider: playwright/);
+  assert.match(violations[0], /object returned by/);
 });
 
 test('flags a missing makeBrowserConfig helper outright', () => {
@@ -264,6 +265,73 @@ test('extractMakeBrowserConfigBody survives brackets in the parameter list', () 
   assert.ok(scope, 'expected a body');
   assert.match(scope.body, /MARKER/);
   assert.equal(code.slice(scope.start, scope.start + scope.body.length), scope.body);
+});
+
+// Scoping to the function body was still too loose: a decoy declared inside
+// the body satisfied the gate while the RETURNED provider dropped the args.
+test('an in-helper decoy does not satisfy the gate when the return drops the args', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+export function makeBrowserConfig(extraArgs = []) {
+  const unused = { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };
+  return { provider: someOtherProvider() };
+}
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /object returned by/);
+});
+
+test('an in-helper decoy cannot mask a reversed composition in the returned object', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+export function makeBrowserConfig(extraArgs = []) {
+  const unused = { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };
+  return { provider: playwright({ launchOptions: { args: [...extraArgs, ...COMMON_LAUNCH_ARGS] } }) };
+}
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /out of order or carry extra entries/);
+});
+
+test('flags a helper that returns no object literal', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+export function makeBrowserConfig(extraArgs = []) {
+  return buildConfig(extraArgs);
+}
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /does not return an object literal/);
+});
+
+test('extractReturnedObject captures only the returned object', () => {
+  const body = 'const unused = { a: 1 };\n  return { b: 2, c: [3] };';
+  const returned = extractReturnedObject(body, 100);
+  assert.ok(returned, 'expected a returned object');
+  assert.match(returned.body, /b: 2/);
+  assert.ok(!returned.body.includes('a: 1'), 'must not include the local declaration');
+  assert.equal(
+    body.slice(returned.start - 100, returned.start - 100 + returned.body.length),
+    returned.body,
+  );
 });
 
 // The extractor was string-aware, but the launch-key test then ran against
