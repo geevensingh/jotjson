@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   EXPECTED_COMMON_LAUNCH_ARGS,
+  extractInstancesArrays,
   lintInstancesLaunch,
   lintRepo,
   lintSharedConfig,
@@ -156,6 +157,48 @@ test('lintInstancesLaunch flags the PR #418 regression shape', () => {
 test('lintInstancesLaunch flags `launch :` with stray whitespace', () => {
   const source = `instances: [{ browser: 'chromium', launch : {} }],`;
   assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+// Regression: the first revision matched with an unbounded `[\s\S]*?`, which
+// ran past the array's closing `]` and flagged an unrelated later `launch:`.
+// A false positive in a lint gate blocks valid work, which is worse than the
+// miss it guards against.
+test('lintInstancesLaunch ignores a launch key AFTER the instances array closes', () => {
+  const source = [
+    "instances: [{ browser: 'chromium' }],",
+    '  onConsoleLog: () => {},',
+    "  server: { launch: 'unrelated property' },",
+  ].join('\n');
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch still flags launch nested deeper inside the array', () => {
+  const source = "instances: [{ browser: 'chromium', opts: { launch: { args: [] } } }],";
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+test('lintInstancesLaunch is not fooled by a bracket inside a string literal', () => {
+  const source = ["instances: [{ browser: 'chrom]ium' }],", "  other: { launch: 'x' },"].join('\n');
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+test('lintInstancesLaunch scans every instances array, not just the first', () => {
+  const source = [
+    "instances: [{ browser: 'chromium' }],",
+    'other: 1,',
+    "instances: [{ browser: 'firefox', launch: {} }],",
+  ].join('\n');
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+test('extractInstancesArrays returns one body per instances array', () => {
+  const bodies = extractInstancesArrays(
+    'instances: [{ a: 1 }], x: 2, instances: [{ b: [3, 4] }], y: 3',
+  );
+  assert.equal(bodies.length, 2);
+  assert.match(bodies[0], /a: 1/);
+  assert.match(bodies[1], /b: \[3, 4\]/);
+  assert.ok(!bodies[0].includes('x: 2'), 'first body must stop at its closing bracket');
 });
 
 test('parseArrayLiterals extracts single, double, and backtick literals', () => {

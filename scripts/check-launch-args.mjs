@@ -152,12 +152,60 @@ const PROVIDER_ARGS =
 const EXPECTED_COMPOSITION = /^\.\.\.COMMON_LAUNCH_ARGS,\.\.\.extraArgs,?$/;
 
 /**
- * Matches an `instances: [...]` entry carrying a `launch` field -- the
- * PR #418 regression shape. Deliberately loose: any `launch` key
- * appearing within an `instances` array literal is a violation, whether
- * written as `launch:` or `launch :`.
+ * Extracts the body of each `instances: [ ... ]` array literal.
+ *
+ * A regex cannot do this correctly. An earlier revision used
+ * `/instances\s*:\s*\[[\s\S]*?\blaunch\s*:/`, whose `[\s\S]*?` is
+ * unbounded: it happily runs past the array's closing `]` and matches an
+ * unrelated later `launch:` property, rejecting a valid config. For a lint
+ * gate that false positive is worse than the miss it was guarding against,
+ * because it blocks correct work.
+ *
+ * This walks the source tracking bracket depth, skipping over string and
+ * template literals so a `]` inside a string cannot end the array early.
+ * Input is expected to be comment-stripped already.
+ *
+ * @param code comment-stripped source
+ * @returns one entry per `instances:` array, each the text between its
+ *   outermost brackets
  */
-const INSTANCES_LAUNCH = /instances\s*:\s*\[[\s\S]*?\blaunch\s*:/;
+export function extractInstancesArrays(code) {
+  const bodies = [];
+  const opener = /\binstances\s*:\s*\[/g;
+  let match;
+  while ((match = opener.exec(code)) !== null) {
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let index = start;
+    let quote = null;
+    while (index < code.length && depth > 0) {
+      const char = code[index];
+      if (quote) {
+        if (char === '\\') {
+          index += 2;
+          continue;
+        }
+        if (char === quote) quote = null;
+      } else if (char === "'" || char === '"' || char === '`') {
+        quote = char;
+      } else if (char === '[' || char === '{' || char === '(') {
+        depth += 1;
+      } else if (char === ']' || char === '}' || char === ')') {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+      index += 1;
+    }
+    // Unbalanced (truncated or unparsable) source: take what is left rather
+    // than silently skipping, so a malformed config still gets scanned.
+    bodies.push(code.slice(start, index));
+    opener.lastIndex = Math.max(index, opener.lastIndex);
+  }
+  return bodies;
+}
+
+/** Matches a `launch` key, whether written as `launch:` or `launch :`. */
+const LAUNCH_KEY = /\blaunch\s*:/;
 
 /** Parses the string-literal entries out of a captured array body. */
 export function parseArrayLiterals(body) {
@@ -242,7 +290,10 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
 
 /** Lints one config file for the `instances[].launch` regression shape. */
 export function lintInstancesLaunch(source, path) {
-  if (INSTANCES_LAUNCH.test(stripComments(source))) {
+  const hasLaunch = extractInstancesArrays(stripComments(source)).some((body) =>
+    LAUNCH_KEY.test(body),
+  );
+  if (hasLaunch) {
     return [
       `${path}: found a \`launch\` field inside an \`instances: [...]\` entry. ` +
         `@vitest/browser-playwright silently ignores it (PR #418). Pass launch ` +
