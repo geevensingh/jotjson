@@ -182,9 +182,38 @@ test('the real repo lockfile has every peer-locked family in lockstep', () => {
 
 test('PEER_LOCKED_FAMILIES covers every family the docs claim is asserted', () => {
   const names = PEER_LOCKED_FAMILIES.map((family) => family.name);
-  for (const expected of ['vitest', 'angular', 'material']) {
+  for (const expected of ['vitest', 'angular', 'material', 'playwright']) {
     assert.ok(names.includes(expected), `missing peer-locked family '${expected}'`);
   }
+});
+
+// Only families with a genuine tracking issue carry one; stamping the
+// long-standing Angular/Material families with the Vitest remediation issue
+// would point maintainers at unrelated history.
+test('family diagnostics only cite an issue when the family has one', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+
+  const angularDrift = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  angularDrift.packages['node_modules/@angular/router'].version = '21.3.0';
+  const angularProblems = checkPeerLockedFamilies(pkg, angularDrift, 'root');
+  assert.equal(angularProblems.length, 1);
+  assert.ok(!angularProblems[0].includes('#533'), 'angular must not cite the vitest issue');
+
+  const playwrightDrift = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  playwrightDrift.packages['node_modules/playwright-core'].version = '1.61.0';
+  const playwrightProblems = checkPeerLockedFamilies(pkg, playwrightDrift, 'root');
+  assert.equal(playwrightProblems.length, 1);
+  assert.match(playwrightProblems[0], /#537/);
+});
+
+test('the playwright family is pinned in lockstep, guarding the CI Chromium version', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  // A lone `playwright` bump would nest a second copy under @playwright/test.
+  lock.packages['node_modules/playwright'].version = '1.61.0';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^playwright family: resolved versions diverge/);
 });
 
 test('checkPeerLockedFamilies flags a partial Angular-family bump', () => {

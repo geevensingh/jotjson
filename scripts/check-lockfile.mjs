@@ -463,7 +463,6 @@ export const PEER_LOCKED_FAMILIES = [
       '@angular-devkit/build-angular',
     ],
     followers: [],
-    issue: '#533',
   },
   // Material and CDK peer-lock to each other exactly but ship on their own
   // release cadence, which is why dependabot.yml carves them out of the
@@ -474,9 +473,41 @@ export const PEER_LOCKED_FAMILIES = [
     workspace: 'root',
     declared: ['@angular/material', '@angular/cdk'],
     followers: [],
-    issue: '#533',
+  },
+  // Playwright is exact-linked rather than peer-locked: @playwright/test
+  // depends on `playwright` at an exact version, which depends on
+  // `playwright-core` at an exact version. The lockstep requirement is the
+  // same, so it belongs here.
+  //
+  // It matters beyond tidiness. `.github/actions/install-playwright-chromium`
+  // derives the CI cache key from the resolved root `playwright` version and
+  // is used by BOTH the e2e job and the Vitest browser-mode unit tests, so
+  // this family determines the exact Chromium binary the suite runs against.
+  // Issue #533 deliberately held it at 1.60.0 to keep the browser out of the
+  // runner upgrade as a confounding variable; #537 tracks moving it, and the
+  // whole family must move together.
+  {
+    name: 'playwright',
+    workspace: 'root',
+    declared: ['playwright', '@playwright/test'],
+    followers: ['playwright-core'],
+    issue: '#537',
   },
 ];
+
+/**
+ * Renders a family's tracking-issue reference, or nothing when it has none.
+ *
+ * `issue` is optional on purpose: the Angular and Material families are
+ * long-standing and have no single tracking issue, and stamping them with
+ * the Vitest remediation issue would point a maintainer at unrelated
+ * history. `printPeerLockedFamilyMessage` always prints the
+ * docs/supply-chain.md pointer, so a family without an issue still has
+ * somewhere to go.
+ */
+function issueSuffix(family) {
+  return family.issue ? ` (${family.issue})` : '';
+}
 
 /**
  * Verifies every peer-locked family in `pkg`/`lock` moves in lockstep.
@@ -518,7 +549,7 @@ export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
       problems.push(
         `${family.name} family: declared ranges diverge (${detail}). ` +
           `These packages peer-depend on each other at an exact version, so a ` +
-          `partial bump cannot resolve -- npm will ERESOLVE on install (${family.issue}).`,
+          `partial bump cannot resolve -- npm will ERESOLVE on install.${issueSuffix(family)}`,
       );
     }
 
@@ -547,7 +578,7 @@ export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
           `${family.name} family: '${name}' resolves to ${entries.length} copies at ` +
             `differing versions (${detail}). Every copy must be the same version -- ` +
             `otherwise one is an unwatched duplicate that can silently carry an ` +
-            `advisory (${family.issue}).`,
+            `advisory.${issueSuffix(family)}`,
         );
         continue;
       }
@@ -559,7 +590,7 @@ export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
       problems.push(
         `${family.name} family: resolved versions diverge (${detail}). ` +
           `Every member -- including transitives not named in package.json -- ` +
-          `must be at the same version (${family.issue}).`,
+          `must be at the same version.${issueSuffix(family)}`,
       );
     }
   }

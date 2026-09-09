@@ -10,6 +10,7 @@ import {
   lintRepo,
   lintSharedConfig,
   listVitestConfigs,
+  maskStringLiterals,
   parseArrayLiterals,
   stripComments,
 } from './check-launch-args.mjs';
@@ -138,6 +139,95 @@ test('accepts whitespace and newline variation inside the factory call', () => {
     composition: '\n        ...COMMON_LAUNCH_ARGS,\n        ...extraArgs,\n      ',
   });
   assert.deepEqual(lintSharedConfig(source), []);
+});
+
+// stripComments keeps string contents by design, so the structural matchers
+// run against masked literals. Without that, a quoted decoy satisfies the
+// gate while the real provider is broken -- a false negative in the guard.
+test('a quoted decoy cannot satisfy the provider check', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+export function makeBrowserConfig(extraArgs = []) {
+  const help = "provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } })";
+  return { provider: somethingElse(), help };
+}
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /could not find a .*provider: playwright/);
+});
+
+test('a quoted decoy cannot mask a reversed real composition', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+export function makeBrowserConfig(extraArgs = []) {
+  const doc = \`provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } })\`;
+  return {
+    provider: playwright({ launchOptions: { args: [...extraArgs, ...COMMON_LAUNCH_ARGS] } }),
+    doc,
+  };
+}
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /out of order or carry extra entries/);
+});
+
+// An unanchored playwright(...) matcher would be satisfied by an unused
+// helper while makeBrowserConfig actually returned a different provider.
+test('an unused helper with the right shape does not satisfy the gate', () => {
+  const source = `
+export const COMMON_LAUNCH_ARGS: readonly string[] = [
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+];
+
+const unused = playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } });
+
+export function makeBrowserConfig(extraArgs = []) {
+  return { provider: webdriverio({ launchOptions: { args: [] } }) };
+}
+`;
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /could not find a .*provider: playwright/);
+});
+
+test('the real flag literals are still read through the mask', () => {
+  // Masking preserves length, so capture offsets index the unmasked source.
+  // If that slicing were wrong, the declared flags would read as empty and
+  // this would report a mismatch instead of passing.
+  assert.deepEqual(lintSharedConfig(goodSource()), []);
+  const violations = lintSharedConfig(goodSource({ args: ['--no-sandbox', '--disable-gpu'] }));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /--disable-dev-shm-usage/);
+});
+
+test('maskStringLiterals preserves length and blanks only literal contents', () => {
+  const source = `const a = "hello"; const b = 1;`;
+  const masked = maskStringLiterals(source);
+  assert.equal(masked.length, source.length);
+  assert.ok(!masked.includes('hello'), 'literal content should be masked');
+  assert.ok(masked.includes('const b = 1;'), 'code outside literals is untouched');
+});
+
+test('maskStringLiterals is not fooled by an escaped quote', () => {
+  const source = 'const a = "he\\"llo world"; const b = 2;';
+  const masked = maskStringLiterals(source);
+  assert.equal(masked.length, source.length);
+  assert.ok(!masked.includes('world'), 'escaped quote must not end the literal early');
+  assert.ok(masked.includes('const b = 2;'));
 });
 
 test('lintInstancesLaunch accepts an instances entry with no launch field', () => {

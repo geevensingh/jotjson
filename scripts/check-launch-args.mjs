@@ -127,15 +127,68 @@ export function stripComments(source) {
   return out;
 }
 
+/**
+ * Replaces the *contents* of string and template literals with a filler
+ * character, preserving the quotes and the exact length of the source.
+ *
+ * `stripComments` deliberately keeps string contents, because a config may
+ * legitimately need them. But the structural matchers below are plain
+ * regexes, so without masking, a quoted decoy like
+ * `"provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } })"`
+ * inside a log message would satisfy this gate even if the real provider
+ * were missing or malformed -- a false negative in a guard whose whole job
+ * is to notice that.
+ *
+ * Length is preserved so a match index in the masked text points at the
+ * same offset in the original, letting the caller slice real content
+ * (e.g. the actual flag literals) back out of the unmasked source.
+ */
+export function maskStringLiterals(code) {
+  const chars = [...code];
+  let index = 0;
+  let quote = null;
+  while (index < chars.length) {
+    const char = chars[index];
+    if (quote) {
+      if (char === '\\') {
+        // Blank the escape pair so a `\"` cannot appear to close the string.
+        chars[index] = FILLER;
+        if (index + 1 < chars.length) chars[index + 1] = FILLER;
+        index += 2;
+        continue;
+      }
+      if (char === quote) {
+        quote = null;
+      } else if (char !== '\n') {
+        chars[index] = FILLER;
+      }
+      index += 1;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === '`') quote = char;
+    index += 1;
+  }
+  return chars.join('');
+}
+
+/** Neutral stand-in for masked literal contents; matches none of the patterns below. */
+const FILLER = '\u0000';
+
 /** Matches the `export const COMMON_LAUNCH_ARGS ... = [ ... ];` block. */
-const COMMON_ARGS_BLOCK = /export\s+const\s+COMMON_LAUNCH_ARGS\s*:[^=]*=\s*\[([\s\S]*?)\]\s*;/;
+const COMMON_ARGS_BLOCK = /export\s+const\s+COMMON_LAUNCH_ARGS\s*:[^=]*=\s*\[([\s\S]*?)\]\s*;/d;
 
 /**
  * Matches the provider factory call and captures the `args:` value, e.g.
  *   provider: playwright({ launchOptions: { args: [...A, ...B] } })
+ *
+ * Anchored on `provider:` deliberately. An unanchored `playwright(...)`
+ * matcher would be satisfied by any such call in the file, so a future
+ * config could leave an unused helper carrying the expected composition
+ * while `makeBrowserConfig()` actually returned a different provider, and
+ * this gate would still pass.
  */
 const PROVIDER_ARGS =
-  /playwright\s*\(\s*\{[\s\S]*?launchOptions\s*:\s*\{[\s\S]*?args\s*:\s*\[([\s\S]*?)\][\s\S]*?\}[\s\S]*?\}\s*\)/;
+  /provider\s*:\s*playwright\s*\(\s*\{[\s\S]*?launchOptions\s*:\s*\{[\s\S]*?args\s*:\s*\[([\s\S]*?)\][\s\S]*?\}[\s\S]*?\}\s*\)/d;
 
 /**
  * The exact `launchOptions.args` composition, after whitespace is stripped
@@ -276,15 +329,25 @@ export function parseArrayLiterals(body) {
 export function lintSharedConfig(source, path = SHARED_CONFIG) {
   const violations = [];
   const code = stripComments(source);
+  // Structural matching runs against masked literals so a quoted decoy
+  // cannot satisfy the gate. Lengths are preserved, so a capture group's
+  // offsets index the unmasked `code` for the real content.
+  const masked = maskStringLiterals(code);
+  // `d` (hasIndices) gives exact capture-group offsets, which index the
+  // unmasked `code` because masking preserves length.
+  const captured = (match, groupIndex) => {
+    const span = match.indices?.[groupIndex];
+    return span ? code.slice(span[0], span[1]) : match[groupIndex];
+  };
 
-  const argsBlock = COMMON_ARGS_BLOCK.exec(code);
+  const argsBlock = COMMON_ARGS_BLOCK.exec(masked);
   if (!argsBlock) {
     violations.push(
       `${path}: could not find an \`export const COMMON_LAUNCH_ARGS ... = [ ... ];\` declaration. ` +
         `The launch-args funnel is the PR #418 regression guard; do not remove or rename it.`,
     );
   } else {
-    const declared = parseArrayLiterals(argsBlock[1]);
+    const declared = parseArrayLiterals(captured(argsBlock, 1));
     const expected = EXPECTED_COMMON_LAUNCH_ARGS;
     if (declared.length !== expected.length || declared.some((flag, i) => flag !== expected[i])) {
       violations.push(
@@ -296,15 +359,16 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
     }
   }
 
-  const providerArgs = PROVIDER_ARGS.exec(code);
+  const providerArgs = PROVIDER_ARGS.exec(masked);
   if (!providerArgs) {
     violations.push(
-      `${path}: could not find a \`playwright({ launchOptions: { args: [...] } })\` factory call. ` +
-        `@vitest/browser-playwright reads launch options ONLY from this factory argument ` +
-        `(re-verified against 4.1.11); any other placement is silently ignored.`,
+      `${path}: could not find a \`provider: playwright({ launchOptions: { args: [...] } })\` ` +
+        `factory call. @vitest/browser-playwright reads launch options ONLY from this factory ` +
+        `argument (re-verified against 4.1.11); any other placement is silently ignored.`,
     );
   } else {
-    const composition = providerArgs[1].replace(/\s+/g, '');
+    const providerArgsBody = captured(providerArgs, 1);
+    const composition = providerArgsBody.replace(/\s+/g, '');
     if (!EXPECTED_COMPOSITION.test(composition)) {
       const missingCommon = !composition.includes('...COMMON_LAUNCH_ARGS');
       const missingExtra = !composition.includes('...extraArgs');
@@ -334,7 +398,7 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
       violations.push(
         `${path}: the provider's \`launchOptions.args\` must be exactly ` +
           `\`[...COMMON_LAUNCH_ARGS, ...extraArgs]\`, but ${why} ` +
-          `Found \`[${providerArgs[1].trim()}]\`.`,
+          `Found \`[${providerArgsBody.trim()}]\`.`,
       );
     }
   }
