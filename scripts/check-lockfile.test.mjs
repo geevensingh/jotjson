@@ -156,6 +156,51 @@ test('checkMetadataFields flags an unparsable resolved URL', () => {
   assert.match(offenders[0].reason, /not a parsable URL/);
 });
 
+// Host alone is not provenance: http:// downgrades the fetch to cleartext,
+// and embedded credentials would be committed in plain text to a public repo.
+// Both name the correct host, so a host-only check accepted them.
+test('checkMetadataFields flags an http:// resolved URL on the right host', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'http://registry.npmjs.org/x/-/x-1.0.0.tgz' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /expected 'https:\/\/'/);
+  assert.equal(offenders[0].kind, 'provenance');
+});
+
+test('checkMetadataFields flags credentials embedded in the resolved URL', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({
+      ...GOOD_ENTRY,
+      resolved: 'https://user:token@registry.npmjs.org/x/-/x-1.0.0.tgz',
+    }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /embeds credentials/);
+  assert.equal(offenders[0].kind, 'provenance');
+});
+
+test('checkMetadataFields flags a username-only credential', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'https://user@registry.npmjs.org/x/-/x-1.0.0.tgz' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /embeds credentials/);
+});
+
+// The two shapes need opposite fixes, so the reporter branches on `kind`:
+// missing metadata is repaired by regenerating, invalid provenance must be
+// repaired in place or unrelated versions float.
+test('checkMetadataFields tags missing vs provenance offenders distinctly', () => {
+  const missing = checkMetadataFields(lockWithEntry({ version: '1.0.0' }));
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].kind, 'missing');
+
+  const provenance = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha1-abc=' }));
+  assert.equal(provenance.length, 1);
+  assert.equal(provenance[0].kind, 'provenance');
+});
+
 test('checkMetadataFields still allows file: and git+ sources', () => {
   assert.deepEqual(
     checkMetadataFields(

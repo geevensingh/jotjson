@@ -179,9 +179,32 @@ comment rather than leaving a claim the config cannot honor.
 ## Registry provenance in the lockfile
 
 Every `resolved` URL in a committed lockfile must point at
-`registry.npmjs.org`, and every `integrity` must be `sha512-`. Both are
-enforced by `checkMetadataFields` in `scripts/check-lockfile.mjs`, which
-runs in CI *before* `npm ci`.
+`registry.npmjs.org` over `https`, carry no embedded credentials, and every
+`integrity` must be `sha512-`. All of it is enforced by
+`checkMetadataFields` in `scripts/check-lockfile.mjs`, which runs in CI
+*before* `npm ci`.
+
+### Scope: this codifies the existing state, it does not change workflow
+
+This is not a new constraint on how you install. Before PR #534 every one
+of the 1214 entries in the root lockfile already resolved to
+`registry.npmjs.org` with a sha512 digest -- zero exceptions -- and the
+same held for `api/`. The gate makes that de-facto invariant explicit and
+enforced; it does not migrate anyone off anything.
+
+**Working behind a corporate mirror is still fine.** npm's
+`replace-registry-host` defaults to `npmjs`, which rewrites
+`registry.npmjs.org` hosts to your configured registry *at install time*.
+So a lockfile naming the public registry installs correctly both for
+direct consumers and through a mirror -- verified on #534 by running
+`npm ci` from a proxy against the repaired lockfile. The reverse is not
+true: a lockfile naming a mirror only works for people who can reach that
+mirror. Public URLs are the strictly more portable choice, which is why
+they are the committed form.
+
+The one thing to avoid is *committing* mirror-rewritten entries. Use
+`--registry=https://registry.npmjs.org/` on dependency commands (see
+Prevention below) and the gate never fires.
 
 ### The failure mode (PR #534)
 

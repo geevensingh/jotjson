@@ -32,6 +32,26 @@ updates:
     ignore:
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # The Vitest family is capped at 4.x by @analogjs/vitest-angular,
+      # which peers `vitest: "^1.3.1 || ^2.0.0 || ^3.0.0 || ^4.0.0"`. It is
+      # not in the `vitest` group below because it also peers
+      # @angular-devkit/architect, so it straddles the vitest and angular
+      # families and no grouping assigns it correctly.
+      #
+      # Without these ignores the group would happily propose a 5.x bump
+      # that can never install: npm ERESOLVEs against the ^4 peer, and
+      # AGENTS.md Section 2 forbids working around that with
+      # --legacy-peer-deps or --force. That is a recurring unmergeable PR,
+      # not a useful signal.
+      #
+      # Same shape as the jwks-rsa entry in the api/ ecosystem below: block
+      # a known-unmergeable major and record the unblock condition. Remove
+      # these entries once @analogjs/vitest-angular publishes a peer range
+      # admitting vitest 5, then bump the family and Analog together.
+      - dependency-name: 'vitest'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@vitest/*'
+        update-types: ['version-update:semver-major']
     groups:
       # Angular runtime + dev tooling are peer-locked: @angular/compiler-cli
       # and friends must match @angular/* exactly. Bundle every @angular/* and
@@ -76,9 +96,10 @@ updates:
       #   - 4.x LOCKSTEP ONLY. @analogjs/vitest-angular peers vitest at
       #     ^4.0.0 and is NOT in this group: it also peers
       #     @angular-devkit/architect, so it straddles the vitest and angular
-      #     families and no grouping assigns it correctly. A vitest MAJOR will
-      #     therefore additionally require a coordinated
-      #     @analogjs/vitest-angular bump that Dependabot will not bundle.
+      #     families and no grouping assigns it correctly. Vitest majors are
+      #     therefore blocked via the `ignore` entries above rather than
+      #     grouped, since a 5.x group PR could not install. Lifting that
+      #     block requires bumping Analog in the same change.
       #
       # update-types is deliberately omitted (matching the angular group): the
       # exact peer pins break identically at patch, minor, and major, so

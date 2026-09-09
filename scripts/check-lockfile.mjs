@@ -171,6 +171,7 @@ export function checkMetadataFields(lock) {
       // half the problem and re-run into the other half.
       offenders.push({
         path,
+        kind: 'missing',
         reason: hasIntegrity ? 'missing `resolved`' : 'missing `resolved` and `integrity`',
       });
       continue;
@@ -182,6 +183,7 @@ export function checkMetadataFields(lock) {
       if (!/#[0-9a-f]{40}$/.test(resolved)) {
         offenders.push({
           path,
+          kind: 'missing',
           reason: 'git source is not pinned to a 40-hex commit SHA',
         });
       }
@@ -189,7 +191,7 @@ export function checkMetadataFields(lock) {
     }
 
     if (!hasIntegrity) {
-      offenders.push({ path, reason: 'missing `integrity`' });
+      offenders.push({ path, kind: 'missing', reason: 'missing `integrity`' });
       continue;
     }
 
@@ -200,7 +202,9 @@ export function checkMetadataFields(lock) {
     //
     // This is the sibling of the issue #509 shape above: that gate catches
     // metadata that is *missing*, this one catches metadata that is
-    // *wrong*. Both are invariants `npm ci` does not enforce.
+    // *wrong*. Both are invariants `npm ci` does not enforce. They are
+    // tagged with different `kind`s because they need opposite fixes --
+    // see `printMetadataMessage`.
     //
     // How it happens (observed on PR #534): a contributor or agent whose
     // `npm config get registry` points at a corporate proxy re-resolves
@@ -211,19 +215,43 @@ export function checkMetadataFields(lock) {
     // publicly reachable; the damage was reproducibility, provenance, and
     // digest strength, none of which any existing gate checked.
     if (!/^file:/.test(resolved)) {
-      let host = null;
+      let url = null;
       try {
-        host = new URL(resolved).host;
+        url = new URL(resolved);
       } catch {
-        offenders.push({ path, reason: `\`resolved\` is not a parsable URL: ${resolved}` });
-        continue;
-      }
-      if (host !== PUBLIC_REGISTRY_HOST) {
         offenders.push({
           path,
+          kind: 'provenance',
+          reason: `\`resolved\` is not a parsable URL: ${resolved}`,
+        });
+        continue;
+      }
+      if (url.host !== PUBLIC_REGISTRY_HOST) {
+        offenders.push({
+          path,
+          kind: 'provenance',
           reason:
-            `\`resolved\` points at '${host}', not '${PUBLIC_REGISTRY_HOST}'. ` +
+            `\`resolved\` points at '${url.host}', not '${PUBLIC_REGISTRY_HOST}'. ` +
             `Re-resolve with \`--registry=https://${PUBLIC_REGISTRY_HOST}/\`.`,
+        });
+        continue;
+      }
+      // Host alone is not provenance. `http://` downgrades the fetch to
+      // cleartext, and embedded credentials would be committed in plain
+      // text to a public repo -- both while naming the right host.
+      if (url.protocol !== 'https:') {
+        offenders.push({
+          path,
+          kind: 'provenance',
+          reason: `\`resolved\` uses '${url.protocol}//', expected 'https://'`,
+        });
+        continue;
+      }
+      if (url.username !== '' || url.password !== '') {
+        offenders.push({
+          path,
+          kind: 'provenance',
+          reason: '`resolved` embeds credentials in the URL; strip the userinfo component',
         });
         continue;
       }
@@ -236,6 +264,7 @@ export function checkMetadataFields(lock) {
     if (!integrity.startsWith('sha512-')) {
       offenders.push({
         path,
+        kind: 'provenance',
         reason: `\`integrity\` is '${integrity.split('-')[0]}', expected 'sha512'`,
       });
     }
@@ -270,22 +299,62 @@ function printRegenerationSteps(workspace) {
 }
 
 function printMetadataMessage(workspace, offenders) {
-  console.error('');
-  console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (missing metadata)`);
-  console.error(
-    `  ${offenders.length} entr${offenders.length === 1 ? 'y' : 'ies'} lack${offenders.length === 1 ? 's' : ''} the \`resolved\`/\`integrity\` that pin what npm downloads.`,
-  );
-  const shown = offenders.slice(0, MAX_REPORTED_OFFENDERS);
-  for (const offender of shown) {
-    console.error(`    ${offender.path} - ${offender.reason}`);
+  // Two failure shapes with OPPOSITE fixes share this reporter, so they are
+  // reported separately. Missing metadata (issue #509) is repaired by
+  // regenerating the lockfile from scratch. Invalid provenance or a weak
+  // digest (PR #534) must NOT be -- the metadata is present, so a full
+  // regeneration would re-resolve every range and float versions, turning
+  // a metadata fix into an unreviewed dependency bump (AGENTS.md Section 7
+  // #13). Printing the regeneration recipe for those would actively cause
+  // the harm the supply-chain doc warns about.
+  const missing = offenders.filter((offender) => offender.kind !== 'provenance');
+  const provenance = offenders.filter((offender) => offender.kind === 'provenance');
+
+  const listOffenders = (list) => {
+    const shown = list.slice(0, MAX_REPORTED_OFFENDERS);
+    for (const offender of shown) {
+      console.error(`    ${offender.path} - ${offender.reason}`);
+    }
+    if (list.length > shown.length) {
+      console.error(`    ... showing first ${shown.length} of ${list.length}`);
+    }
+  };
+
+  if (missing.length > 0) {
+    console.error('');
+    console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (missing metadata)`);
+    console.error(
+      `  ${missing.length} entr${missing.length === 1 ? 'y' : 'ies'} lack${missing.length === 1 ? 's' : ''} the \`resolved\`/\`integrity\` that pin what npm downloads.`,
+    );
+    listOffenders(missing);
+    console.error('  Common cause: regenerating the lockfile while `node_modules` was present,');
+    console.error('  which makes npm rebuild entries from the on-disk tree (no metadata there).');
+    console.error('  Fix (order matters - `node_modules` MUST be absent), from the repo root:');
+    printRegenerationSteps(workspace);
   }
-  if (offenders.length > shown.length) {
-    console.error(`    ... showing first ${shown.length} of ${offenders.length}`);
+
+  if (provenance.length > 0) {
+    console.error('');
+    console.error(
+      `check-lockfile: FAILED for workspace '${workspace.name}' (invalid provenance/digest)`,
+    );
+    console.error(
+      `  ${provenance.length} entr${provenance.length === 1 ? 'y' : 'ies'} ${provenance.length === 1 ? 'has' : 'have'} metadata, but it does not name the public registry over https with a sha512 digest.`,
+    );
+    listOffenders(provenance);
+    console.error('  Common cause: your npm registry points at a corporate proxy, so');
+    console.error('  re-resolving rewrote `resolved` to the proxy host and recorded the');
+    console.error('  legacy sha1 `shasum` it advertises instead of `dist.integrity`.');
+    console.error('  Fix: repair these entries IN PLACE - do NOT regenerate the lockfile,');
+    console.error('  which would re-resolve every range and float unrelated versions.');
+    console.error('  For each entry, take the canonical values from the public registry:');
+    console.error(
+      `    npm view <name>@<version> dist.tarball dist.integrity --registry=https://${PUBLIC_REGISTRY_HOST}/ --json`,
+    );
+    console.error('  then write them back as `resolved` and `integrity`. Afterwards confirm');
+    console.error("  no entry's `version` changed. See docs/supply-chain.md ->");
+    console.error('  "Registry provenance in the lockfile".');
   }
-  console.error('  Common cause: regenerating the lockfile while `node_modules` was present,');
-  console.error('  which makes npm rebuild entries from the on-disk tree (no metadata there).');
-  console.error('  Fix (order matters - `node_modules` MUST be absent), from the repo root:');
-  printRegenerationSteps(workspace);
 }
 
 /**
