@@ -24,6 +24,7 @@ import {
   checkMetadataFields,
   checkPeerLockedFamilies,
   checkVersionInSync,
+  PEER_LOCKED_FAMILIES,
 } from './check-lockfile.mjs';
 
 /**
@@ -106,10 +107,43 @@ test('checkPeerLockedFamilies tolerates a lockfile with no packages map', () => 
   assert.deepEqual(checkPeerLockedFamilies({}, {}, 'root'), []);
 });
 
+// A family absent from the manifest is not drift. A family that is only
+// partially declared is, since dropping one member of an exact-peer-locked
+// set is the failure this gate exists for.
+test('checkPeerLockedFamilies skips a family that is entirely absent', () => {
+  const { lock } = vitestFixture();
+  assert.deepEqual(checkPeerLockedFamilies({ devDependencies: {} }, lock, 'root'), []);
+});
+
+test('checkPeerLockedFamilies still flags a partially declared family', () => {
+  const { pkg, lock } = vitestFixture();
+  delete pkg.devDependencies['@vitest/browser-playwright'];
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.ok(problems.some((p) => /@vitest\/browser-playwright.*not declared/.test(p)));
+});
+
 test('the real repo lockfile has every peer-locked family in lockstep', () => {
   const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
   const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
   assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
+});
+
+test('PEER_LOCKED_FAMILIES covers every family the docs claim is asserted', () => {
+  const names = PEER_LOCKED_FAMILIES.map((family) => family.name);
+  for (const expected of ['vitest', 'angular', 'material']) {
+    assert.ok(names.includes(expected), `missing peer-locked family '${expected}'`);
+  }
+});
+
+test('checkPeerLockedFamilies flags a partial Angular-family bump', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  // Move one member and leave the rest behind -- the shape a single-package
+  // Dependabot PR would produce for an exact-peer-locked family.
+  lock.packages['node_modules/@angular/router'].version = '21.3.0';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^angular family: resolved versions diverge/);
 });
 
 // Registry provenance + digest strength (PR #534). A corporate npm proxy
@@ -186,6 +220,46 @@ test('checkMetadataFields flags a username-only credential', () => {
   );
   assert.equal(offenders.length, 1);
   assert.match(offenders[0].reason, /embeds credentials/);
+});
+
+// A query string clears the host, scheme and userinfo checks, so it is the
+// remaining place a token can hide in an otherwise well-formed URL.
+test('checkMetadataFields flags a query string on the tarball URL', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({
+      ...GOOD_ENTRY,
+      resolved: 'https://registry.npmjs.org/x/-/x-1.0.0.tgz?token=secret',
+    }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /query string or fragment/);
+  assert.equal(offenders[0].kind, 'provenance');
+});
+
+test('checkMetadataFields flags a fragment on the tarball URL', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'https://registry.npmjs.org/x/-/x-1.0.0.tgz#frag' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /query string or fragment/);
+});
+
+// These reason strings land in public CI logs, so they must never echo a
+// value that could carry a secret.
+test('checkMetadataFields does not echo secrets from offending URLs', () => {
+  const cases = [
+    'https://registry.npmjs.org/x/-/x-1.0.0.tgz?token=SUPERSECRET',
+    'https://user:SUPERSECRET@registry.npmjs.org/x/-/x-1.0.0.tgz',
+    'ht!tp://SUPERSECRET',
+  ];
+  for (const resolved of cases) {
+    const offenders = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, resolved }));
+    assert.equal(offenders.length, 1, resolved);
+    assert.ok(
+      !offenders[0].reason.includes('SUPERSECRET'),
+      `reason leaked the secret for ${resolved}: ${offenders[0].reason}`,
+    );
+  }
 });
 
 // The two shapes need opposite fixes, so the reporter branches on `kind`:

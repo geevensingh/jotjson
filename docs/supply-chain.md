@@ -178,11 +178,22 @@ comment rather than leaving a claim the config cannot honor.
 
 ## Registry provenance in the lockfile
 
-Every `resolved` URL in a committed lockfile must point at
-`registry.npmjs.org` over `https`, carry no embedded credentials, and every
-`integrity` must be `sha512-`. All of it is enforced by
-`checkMetadataFields` in `scripts/check-lockfile.mjs`, which runs in CI
-*before* `npm ci`.
+Every **registry tarball** entry in a committed lockfile must have a
+`resolved` URL that points at `registry.npmjs.org` over `https`, carries no
+userinfo, query string, or fragment, and an `integrity` that is `sha512-`.
+All of it is enforced by `checkMetadataFields` in
+`scripts/check-lockfile.mjs`, which runs in CI *before* `npm ci`.
+
+Two entry kinds are deliberately exempt, because they are not registry
+tarballs:
+
+- **`file:` sources** -- a local path, so there is no host to check.
+- **Git sources** (`git+...`) -- npm records no `integrity` for these, so
+  the gate instead requires the URL be pinned to a 40-hex commit SHA,
+  which is the only thing that fixes the content.
+
+The repo currently has neither, but the exemptions are in the checker so
+adding one later does not require weakening the registry rule.
 
 ### Scope: this codifies the existing state, it does not change workflow
 

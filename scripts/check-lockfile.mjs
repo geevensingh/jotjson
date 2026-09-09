@@ -219,10 +219,13 @@ export function checkMetadataFields(lock) {
       try {
         url = new URL(resolved);
       } catch {
+        // Deliberately does NOT echo `resolved`. A malformed value can
+        // still contain a token, and this reason string lands in public CI
+        // logs. `path` already tells the reader which entry to open.
         offenders.push({
           path,
           kind: 'provenance',
-          reason: `\`resolved\` is not a parsable URL: ${resolved}`,
+          reason: '`resolved` is not a parsable URL',
         });
         continue;
       }
@@ -252,6 +255,21 @@ export function checkMetadataFields(lock) {
           path,
           kind: 'provenance',
           reason: '`resolved` embeds credentials in the URL; strip the userinfo component',
+        });
+        continue;
+      }
+      // A query string or fragment is the other place a token can hide
+      // (`...x-1.0.0.tgz?token=...`), and it clears the host, scheme, and
+      // userinfo checks above. Registry tarball URLs are plain paths, so
+      // anything here is unexpected. The value is not echoed, for the same
+      // reason as the parse-failure branch.
+      if (url.search !== '' || url.hash !== '') {
+        offenders.push({
+          path,
+          kind: 'provenance',
+          reason:
+            '`resolved` carries a query string or fragment; registry tarball URLs are ' +
+            'plain paths, and these can smuggle a credential',
         });
         continue;
       }
@@ -384,6 +402,48 @@ export const PEER_LOCKED_FAMILIES = [
     followers: ['@vitest/browser'],
     issue: '#533',
   },
+  // The Angular runtime + devkit peer-lock at an exact version:
+  // @angular/core peers @angular/compiler exactly, @angular/compiler-cli
+  // peers @angular/compiler exactly, @angular/router peers common /core /
+  // platform-browser exactly, and so on. `.github/dependabot.yml` has
+  // grouped them since before this gate existed; this is the matching
+  // detection half.
+  //
+  // No `followers`: unlike @vitest/browser, every member of this family is
+  // declared in package.json, so there is no exact-pinned transitive
+  // hiding behind a parent.
+  {
+    name: 'angular',
+    workspace: 'root',
+    declared: [
+      '@angular/animations',
+      '@angular/common',
+      '@angular/compiler',
+      '@angular/compiler-cli',
+      '@angular/core',
+      '@angular/forms',
+      '@angular/localize',
+      '@angular/platform-browser',
+      '@angular/platform-server',
+      '@angular/router',
+      '@angular/ssr',
+      '@angular/cli',
+      '@angular-devkit/build-angular',
+    ],
+    followers: [],
+    issue: '#533',
+  },
+  // Material and CDK peer-lock to each other exactly but ship on their own
+  // release cadence, which is why dependabot.yml carves them out of the
+  // `angular` group. Same split here so a Material bump is not reported as
+  // Angular-runtime drift.
+  {
+    name: 'material',
+    workspace: 'root',
+    declared: ['@angular/material', '@angular/cdk'],
+    followers: [],
+    issue: '#533',
+  },
 ];
 
 /**
@@ -397,6 +457,15 @@ export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
 
   for (const family of PEER_LOCKED_FAMILIES) {
     if (family.workspace !== workspaceName) continue;
+
+    // A family that is not used here at all is not drift -- skip it. A
+    // family that is only PARTIALLY declared still falls through to the
+    // per-member check below, because dropping one member of an
+    // exact-peer-locked set is exactly the failure this gate exists for.
+    const declaredHere = family.declared.filter(
+      (name) => typeof (pkg?.devDependencies?.[name] ?? pkg?.dependencies?.[name]) === 'string',
+    );
+    if (declaredHere.length === 0) continue;
 
     // 1. Declared ranges must be identical across the family.
     const ranges = new Map();
