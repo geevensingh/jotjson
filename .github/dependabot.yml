@@ -32,6 +32,26 @@ updates:
     ignore:
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # The Vitest family is capped at 4.x by @analogjs/vitest-angular,
+      # which peers `vitest: "^1.3.1 || ^2.0.0 || ^3.0.0 || ^4.0.0"`. It is
+      # not in the `vitest` group below because it also peers
+      # @angular-devkit/architect, so it straddles the vitest and angular
+      # families and no grouping assigns it correctly.
+      #
+      # Without these ignores the group would happily propose a 5.x bump
+      # that can never install: npm ERESOLVEs against the ^4 peer, and
+      # AGENTS.md Section 2 forbids working around that with
+      # --legacy-peer-deps or --force. That is a recurring unmergeable PR,
+      # not a useful signal.
+      #
+      # Same shape as the jwks-rsa entry in the api/ ecosystem below: block
+      # a known-unmergeable major and record the unblock condition. Remove
+      # these entries once @analogjs/vitest-angular publishes a peer range
+      # admitting vitest 5, then bump the family and Analog together.
+      - dependency-name: 'vitest'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@vitest/*'
+        update-types: ['version-update:semver-major']
     groups:
       # Angular runtime + dev tooling are peer-locked: @angular/compiler-cli
       # and friends must match @angular/* exactly. Bundle every @angular/* and
@@ -49,8 +69,68 @@ updates:
         patterns:
           - '@angular/material'
           - '@angular/cdk'
-      # dev-minor catches everything else dev-typed; keep @angular packages
-      # out so they always route to the angular group above.
+      # The Vitest toolchain is peer-locked at an EXACT version, in both
+      # directions: @vitest/browser-playwright peers vitest exactly and
+      # depends on @vitest/browser exactly; @vitest/coverage-v8 peers vitest
+      # exactly (and @vitest/browser exactly, though that peer is optional);
+      # and vitest itself peers back on @vitest/browser-playwright and
+      # @vitest/coverage-v8 at exact versions. A partial bump cannot resolve.
+      #
+      # Why this group exists (issue #533): these packages previously sat in
+      # dev-minor. PR #491 lifted @vitest/browser-playwright and
+      # @vitest/coverage-v8 4.1.7 -> 4.1.10 as incidental riders there; when
+      # that group PR was superseded by the regenerated #523, the @vitest/*
+      # bumps were dropped entirely while co-tenants survived. Two critical
+      # @vitest/browser advisories stayed open with no signal that their
+      # remediation had vanished. Isolating the family means a dropped bump is
+      # a visibly absent PR rather than three quietly missing lines inside a
+      # large one.
+      #
+      # Scope limits, stated so the next reader does not over-trust this:
+      #   - VERSION UPDATES ONLY. Dependabot groups default to
+      #     `applies-to: version-updates`, and one group cannot serve both
+      #     paths. That is the correct scope here: the security updater cannot
+      #     remediate @vitest/browser at all, because it is transitive and its
+      #     parent pins it exactly -- which is why #533 reports no PR. A
+      #     sibling `applies-to: security-updates` group would be inert.
+      #   - 4.x LOCKSTEP ONLY. @analogjs/vitest-angular peers vitest at
+      #     ^4.0.0 and is NOT in this group: it also peers
+      #     @angular-devkit/architect, so it straddles the vitest and angular
+      #     families and no grouping assigns it correctly. Vitest majors are
+      #     therefore blocked via the `ignore` entries above rather than
+      #     grouped, since a 5.x group PR could not install. Lifting that
+      #     block requires bumping Analog in the same change.
+      #
+      # update-types is deliberately omitted (matching the angular group): the
+      # exact peer pins break identically at patch, minor, and major, so
+      # restricting by update-type would reopen the hole where it hurts most.
+      #
+      # See docs/supply-chain.md -> "Peer-locked dependency families".
+      vitest:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
+      # playwright + @playwright/test are exact-linked rather than
+      # peer-locked: @playwright/test depends on `playwright` at an exact
+      # version, which depends on `playwright-core` at an exact version. A
+      # partial bump nests a duplicate copy, so the lockstep requirement is
+      # the same and docs/supply-chain.md's rule applies: family group,
+      # dev-minor exclusion, and a PEER_LOCKED_FAMILIES assertion.
+      #
+      # This family also determines the Chromium binary the Vitest
+      # browser-mode suite runs against, because
+      # .github/actions/install-playwright-chromium derives its cache key
+      # from the resolved root `playwright` version and is used by both the
+      # e2e job and the web unit tests. #537 tracks moving it; grouping
+      # means that move arrives as one mergeable PR rather than a split
+      # family rejected after the fact.
+      playwright:
+        patterns:
+          - 'playwright'
+          - '@playwright/test'
+      # dev-minor catches everything else dev-typed; keep @angular,
+      # @vitest, and playwright packages out so they always route to the
+      # family groups above.
       dev-minor:
         dependency-type: development
         update-types:
@@ -59,6 +139,10 @@ updates:
         exclude-patterns:
           - '@angular/*'
           - '@angular-devkit/*'
+          - 'vitest'
+          - '@vitest/*'
+          - 'playwright'
+          - '@playwright/test'
 
   - package-ecosystem: npm
     directory: /api
