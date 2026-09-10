@@ -13,9 +13,618 @@
 // unit-tested here.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-import { checkMetadataFields, checkVersionInSync } from './check-lockfile.mjs';
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+import {
+  checkMetadataFields,
+  checkPeerLockedFamilies,
+  checkVersionInSync,
+  PEER_LOCKED_FAMILIES,
+  printMetadataMessage,
+} from './check-lockfile.mjs';
+
+/**
+ * Builds a manifest + lockfile pair describing a healthy vitest family,
+ * so each test below can perturb exactly one thing.
+ */
+function vitestFixture(version = '4.1.11', range = '^4.1.11') {
+  const members = [
+    'vitest',
+    '@vitest/browser-playwright',
+    '@vitest/coverage-v8',
+    '@vitest/browser',
+    '@vitest/expect',
+    '@vitest/mocker',
+    '@vitest/pretty-format',
+    '@vitest/runner',
+    '@vitest/snapshot',
+    '@vitest/spy',
+    '@vitest/utils',
+  ];
+  const packages = { '': { version: '1.0.0' } };
+  for (const name of members) packages[`node_modules/${name}`] = { version };
+  return {
+    pkg: {
+      devDependencies: {
+        vitest: range,
+        '@vitest/browser-playwright': range,
+        '@vitest/coverage-v8': range,
+      },
+    },
+    lock: { packages },
+  };
+}
+
+test('checkPeerLockedFamilies passes on a healthy family', () => {
+  const { pkg, lock } = vitestFixture();
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
+});
+
+test('checkPeerLockedFamilies ignores workspaces it does not govern', () => {
+  const { pkg, lock } = vitestFixture();
+  pkg.devDependencies['@vitest/coverage-v8'] = '^4.1.7';
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'api/'), []);
+});
+
+test('checkPeerLockedFamilies flags divergent declared ranges', () => {
+  const { pkg, lock } = vitestFixture();
+  pkg.devDependencies['@vitest/coverage-v8'] = '^4.1.7';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /declared ranges diverge/);
+  assert.match(problems[0], /#533/);
+});
+
+test('checkPeerLockedFamilies flags a stale transitive follower', () => {
+  const { pkg, lock } = vitestFixture();
+  lock.packages['node_modules/@vitest/browser'].version = '4.1.7';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /resolved versions diverge/);
+  assert.match(problems[0], /@vitest\/browser@4\.1\.7/);
+});
+
+// `vitest` pins its whole runtime surface at its own exact version, so any
+// one of them going stale is the same drift as @vitest/browser.
+test('the vitest followers cover every exact-pinned runtime package', () => {
+  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'vitest');
+  for (const name of [
+    '@vitest/browser',
+    '@vitest/expect',
+    '@vitest/mocker',
+    '@vitest/pretty-format',
+    '@vitest/runner',
+    '@vitest/snapshot',
+    '@vitest/spy',
+    '@vitest/utils',
+  ]) {
+    assert.ok(family.followers.includes(name), `missing follower '${name}'`);
+  }
+});
+
+test('checkPeerLockedFamilies flags a stale @vitest/runner in the real lockfile', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  lock.packages['node_modules/@vitest/runner'].version = '4.1.7';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /@vitest\/runner@4\.1\.7/);
+});
+
+// The `kind` discriminator must be total: `printMetadataMessage` branches on
+// it, and an offender without one would silently fall into the "missing"
+// bucket and be handed regeneration advice it may not warrant.
+test('every checkMetadataFields offender carries a kind, including early returns', () => {
+  const cases = [
+    ['non-object lockfile', null],
+    ['lockfile with no packages map', {}],
+    ['non-object entry', { packages: { '': { version: '1.0.0' }, 'node_modules/x': null } }],
+    ['missing metadata', lockWithEntry({ version: '1.0.0' })],
+    ['provenance failure', lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha1-abc=' })],
+  ];
+  for (const [label, lock] of cases) {
+    const offenders = checkMetadataFields(lock);
+    assert.ok(offenders.length > 0, `${label}: expected at least one offender`);
+    for (const offender of offenders) {
+      assert.ok(
+        offender.kind === 'missing' || offender.kind === 'provenance',
+        `${label}: offender has kind ${JSON.stringify(offender.kind)}`,
+      );
+    }
+  }
+});
+
+test('checkMetadataFields tags the malformed-lockfile early returns as missing', () => {
+  assert.equal(checkMetadataFields(null)[0].kind, 'missing');
+  assert.equal(checkMetadataFields({})[0].kind, 'missing');
+  const nonObjectEntry = checkMetadataFields({
+    packages: { '': { version: '1.0.0' }, 'node_modules/x': null },
+  });
+  assert.equal(nonObjectEntry[0].kind, 'missing');
+});
+
+// npm can nest a duplicate copy for peer-context reasons. Identical copies
+// cannot carry a stale advisory, so only divergent copies are a problem.
+test('checkPeerLockedFamilies allows same-version duplicate copies', () => {
+  const { pkg, lock } = vitestFixture();
+  lock.packages['node_modules/vitest/node_modules/@vitest/browser'] = { version: '4.1.11' };
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
+});
+
+test('checkPeerLockedFamilies flags duplicate copies at differing versions', () => {
+  const { pkg, lock } = vitestFixture();
+  lock.packages['node_modules/vitest/node_modules/@vitest/browser'] = { version: '4.1.7' };
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /differing versions/);
+  assert.match(problems[0], /4\.1\.7/);
+});
+
+test('a same-version duplicate still feeds the common version into the family check', () => {
+  const { pkg, lock } = vitestFixture();
+  // Both copies agree with each other but disagree with the rest of the family.
+  lock.packages['node_modules/@vitest/browser'].version = '4.1.7';
+  lock.packages['node_modules/vitest/node_modules/@vitest/browser'] = { version: '4.1.7' };
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /resolved versions diverge/);
+  assert.match(problems[0], /@vitest\/browser@4\.1\.7/);
+});
+
+test('checkPeerLockedFamilies flags an undeclared family member', () => {
+  const { pkg, lock } = vitestFixture();
+  delete pkg.devDependencies['@vitest/coverage-v8'];
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.ok(problems.some((p) => /is not declared in package\.json/.test(p)));
+});
+
+test('checkPeerLockedFamilies flags a family member missing from the lockfile', () => {
+  const { pkg, lock } = vitestFixture();
+  delete lock.packages['node_modules/@vitest/browser'];
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.ok(problems.some((p) => /has no entry in the lockfile/.test(p)));
+});
+
+test('checkPeerLockedFamilies tolerates a lockfile with no packages map', () => {
+  assert.deepEqual(checkPeerLockedFamilies({}, {}, 'root'), []);
+});
+
+// A family absent from the manifest is not drift. A family that is only
+// partially declared is, since dropping one member of an exact-peer-locked
+// set is the failure this gate exists for.
+test('checkPeerLockedFamilies skips a family that is entirely absent', () => {
+  const { lock } = vitestFixture();
+  assert.deepEqual(checkPeerLockedFamilies({ devDependencies: {} }, lock, 'root'), []);
+});
+
+test('checkPeerLockedFamilies still flags a partially declared family', () => {
+  const { pkg, lock } = vitestFixture();
+  delete pkg.devDependencies['@vitest/browser-playwright'];
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.ok(problems.some((p) => /@vitest\/browser-playwright.*not declared/.test(p)));
+});
+
+test('the real repo lockfile has every peer-locked family in lockstep', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
+});
+
+test('PEER_LOCKED_FAMILIES covers every family the docs claim is asserted', () => {
+  const names = PEER_LOCKED_FAMILIES.map((family) => family.name);
+  for (const expected of ['vitest', 'angular', 'material', 'playwright']) {
+    assert.ok(names.includes(expected), `missing peer-locked family '${expected}'`);
+  }
+});
+
+// Only families with a genuine tracking issue carry one; stamping the
+// long-standing Angular/Material families with the Vitest remediation issue
+// would point maintainers at unrelated history.
+test('family diagnostics only cite an issue when the family has one', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+
+  const angularDrift = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  angularDrift.packages['node_modules/@angular/router'].version = '21.3.0';
+  const angularProblems = checkPeerLockedFamilies(pkg, angularDrift, 'root');
+  assert.equal(angularProblems.length, 1);
+  assert.ok(!angularProblems[0].includes('#533'), 'angular must not cite the vitest issue');
+
+  const playwrightDrift = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  playwrightDrift.packages['node_modules/playwright-core'].version = '1.61.0';
+  const playwrightProblems = checkPeerLockedFamilies(pkg, playwrightDrift, 'root');
+  assert.equal(playwrightProblems.length, 1);
+  assert.match(playwrightProblems[0], /#537/);
+});
+
+test('the playwright family is pinned in lockstep, guarding the CI Chromium version', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  // A lone `playwright` bump would nest a second copy under @playwright/test.
+  lock.packages['node_modules/playwright'].version = '1.61.0';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^playwright family: resolved versions diverge/);
+});
+
+// @angular-devkit/build-angular pins these at the family version and neither
+// is a root declaration, so a partial bump of one would otherwise slip past.
+test('the angular family asserts its same-version devkit followers', () => {
+  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular');
+  assert.deepEqual([...family.followers].sort(), [
+    '@angular-devkit/core',
+    '@angular-devkit/schematics',
+    '@angular/build',
+    '@schematics/angular',
+  ]);
+
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  lock.packages['node_modules/@angular/build'].version = '21.3.0';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /@angular\/build@21\.3\.0/);
+});
+
+// @angular/cli exact-pins these two, and @schematics/angular exact-pins
+// devkit/schematics in turn -- neither is a root declaration, so a stale
+// copy would otherwise pass.
+test('the angular family covers the @angular/cli schematics closure', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  for (const name of ['@angular-devkit/schematics', '@schematics/angular']) {
+    const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+    lock.packages[`node_modules/${name}`].version = '21.3.0';
+    const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+    assert.equal(problems.length, 1, `${name} drift was not caught`);
+    assert.match(problems[0], /^angular family: resolved versions diverge/);
+  }
+});
+
+// The 0.MMmm.pp devkit packages are exact-pinned but on a different
+// numbering, so they are deliberately excluded from a gate that asserts one
+// shared version per family. Pin that decision so it is not "fixed" by
+// adding them, which would fail on a correct lockfile.
+test('the angular family excludes the 0.x-mapped devkit packages', () => {
+  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular');
+  for (const name of ['@angular-devkit/architect', '@angular-devkit/build-webpack']) {
+    assert.ok(
+      !family.followers.includes(name),
+      `${name} uses the 0.x mapping and must be excluded`,
+    );
+  }
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  assert.match(lock.packages['node_modules/@angular-devkit/architect'].version, /^0\./);
+});
+
+test('checkPeerLockedFamilies flags a partial Angular-family bump', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  // Move one member and leave the rest behind -- the shape a single-package
+  // Dependabot PR would produce for an exact-peer-locked family.
+  lock.packages['node_modules/@angular/router'].version = '21.3.0';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^angular family: resolved versions diverge/);
+});
+
+// Registry provenance + digest strength (PR #534). A corporate npm proxy
+// rewrites `resolved` to its own host and can downgrade `integrity` from
+// sha512 to sha1; `npm ci` accepts both, so nothing else catches it.
+function lockWithEntry(entry) {
+  return { packages: { '': { version: '1.0.0' }, 'node_modules/x': entry } };
+}
+
+const GOOD_ENTRY = {
+  version: '1.0.0',
+  resolved: 'https://registry.npmjs.org/x/-/x-1.0.0.tgz',
+  integrity: 'sha512-abc==',
+};
+
+test('checkMetadataFields accepts a public-registry sha512 entry', () => {
+  assert.deepEqual(checkMetadataFields(lockWithEntry(GOOD_ENTRY)), []);
+});
+
+test('checkMetadataFields flags a private-mirror resolved host', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({
+      ...GOOD_ENTRY,
+      resolved:
+        'https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/x/-/x-1.0.0.tgz',
+    }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /does not point at 'registry\.npmjs\.org'/);
+  assert.ok(
+    !/visualstudio/.test(offenders[0].reason),
+    'the mirror host must not be echoed into CI logs',
+  );
+});
+
+test('checkMetadataFields flags sha1 integrity', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha1-u+EtyltO+YOg0K9LB7m8kOoKuro=' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /uses 'sha1', expected 'sha512'/);
+});
+
+// `integrity` is attacker-influenced free text. A dashless value was
+// previously copied verbatim by `split('-')[0]` into public CI logs.
+test('checkMetadataFields does not echo a malformed integrity value', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, integrity: 'SUPERSECRETTOKEN' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /malformed \(no recognized algorithm prefix\)/);
+  assert.ok(!offenders[0].reason.includes('SUPERSECRET'), 'must not echo the value');
+});
+
+test('checkMetadataFields echoes only an allowlisted algorithm label', () => {
+  const offenders = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha256-abc=' }));
+  assert.match(offenders[0].reason, /uses 'sha256'/);
+});
+
+// The hostname itself can carry a secret (`https://<token>.example/...`),
+// and this reason lands in public CI logs.
+test('checkMetadataFields does not echo the offending host', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'https://SUPERSECRET.example/x-1.0.0.tgz' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /does not point at 'registry\.npmjs\.org'/);
+  assert.ok(
+    !/supersecret/i.test(offenders[0].reason),
+    `reason leaked the host: ${offenders[0].reason}`,
+  );
+});
+
+test('checkMetadataFields flags an unparsable resolved URL', () => {
+  const offenders = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, resolved: 'not a url' }));
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /not a parsable URL/);
+});
+
+// Host alone is not provenance: http:// downgrades the fetch to cleartext,
+// and embedded credentials would be committed in plain text to a public repo.
+// Both name the correct host, so a host-only check accepted them.
+test('checkMetadataFields flags an http:// resolved URL on the right host', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'http://registry.npmjs.org/x/-/x-1.0.0.tgz' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /does not use the https:\/\/ scheme/);
+  assert.equal(offenders[0].kind, 'provenance');
+});
+
+// A non-standard scheme parses fine, so echoing it would leak a
+// secret-bearing protocol into public CI logs.
+test('checkMetadataFields does not echo the offending scheme', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'SUPERSECRET://registry.npmjs.org/x/-/x-1.0.0.tgz' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /does not use the https:\/\/ scheme/);
+  assert.ok(
+    !/supersecret/i.test(offenders[0].reason),
+    `reason leaked the scheme: ${offenders[0].reason}`,
+  );
+});
+
+test('checkMetadataFields flags credentials embedded in the resolved URL', () => {
+  // Built from parts so a secret-scanner redaction in a code-review UI
+  // cannot make this fixture *look* malformed. It is a valid URL: the
+  // assertions below prove it parses and carries userinfo, so the
+  // credentials branch is genuinely exercised rather than short-circuited
+  // by the earlier parse-failure branch.
+  const resolved = `https://user:token@${'registry.npmjs.org'}/x/-/x-1.0.0.tgz`;
+  const parsed = new URL(resolved);
+  assert.equal(parsed.username, 'user');
+  assert.equal(parsed.password, 'token');
+
+  const offenders = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, resolved }));
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /embeds credentials/);
+  assert.equal(offenders[0].kind, 'provenance');
+  assert.ok(!offenders[0].reason.includes('token'), 'must not echo the credential');
+});
+
+test('checkMetadataFields flags a username-only credential', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'https://user@registry.npmjs.org/x/-/x-1.0.0.tgz' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /embeds credentials/);
+});
+
+// A query string clears the host, scheme and userinfo checks, so it is the
+// remaining place a token can hide in an otherwise well-formed URL.
+test('checkMetadataFields flags a query string on the tarball URL', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({
+      ...GOOD_ENTRY,
+      resolved: 'https://registry.npmjs.org/x/-/x-1.0.0.tgz?token=secret',
+    }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /query string or fragment/);
+  assert.equal(offenders[0].kind, 'provenance');
+});
+
+test('checkMetadataFields flags a fragment on the tarball URL', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'https://registry.npmjs.org/x/-/x-1.0.0.tgz#frag' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /query string or fragment/);
+});
+
+// These reason strings land in public CI logs, so they must never echo a
+// value that could carry a secret.
+test('checkMetadataFields does not echo secrets from offending URLs', () => {
+  const cases = [
+    'https://registry.npmjs.org/x/-/x-1.0.0.tgz?token=SUPERSECRET',
+    'https://user:SUPERSECRET@registry.npmjs.org/x/-/x-1.0.0.tgz',
+    'ht!tp://SUPERSECRET',
+  ];
+  for (const resolved of cases) {
+    const offenders = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, resolved }));
+    assert.equal(offenders.length, 1, resolved);
+    assert.ok(
+      !offenders[0].reason.includes('SUPERSECRET'),
+      `reason leaked the secret for ${resolved}: ${offenders[0].reason}`,
+    );
+  }
+});
+
+// The two shapes need opposite fixes, so the reporter branches on `kind`:
+// missing metadata is repaired by regenerating, invalid provenance must be
+// repaired in place or unrelated versions float.
+test('checkMetadataFields tags missing vs provenance offenders distinctly', () => {
+  const missing = checkMetadataFields(lockWithEntry({ version: '1.0.0' }));
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].kind, 'missing');
+
+  const provenance = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha1-abc=' }));
+  assert.equal(provenance.length, 1);
+  assert.equal(provenance[0].kind, 'provenance');
+});
+
+test('checkMetadataFields still allows file: and git+ sources', () => {
+  assert.deepEqual(
+    checkMetadataFields(
+      lockWithEntry({
+        version: '1.0.0',
+        resolved: 'git+ssh://git@github.com/o/r.git#' + 'a'.repeat(40),
+      }),
+    ),
+    [],
+  );
+});
+
+// A real `file:` entry carries no integrity -- npm has no tarball to hash.
+// The exemption previously sat only in the provenance block, which runs
+// AFTER the integrity requirement, so every genuine local dependency was
+// reported as missing metadata. The old test hid this by giving its
+// synthetic `file:` entry a sha512 that no real one has.
+test('checkMetadataFields exempts a file: source that has no integrity', () => {
+  assert.deepEqual(
+    checkMetadataFields(lockWithEntry({ version: '1.0.0', resolved: 'file:../local-pkg' })),
+    [],
+  );
+});
+
+test('checkMetadataFields exempts a file: source that does carry integrity', () => {
+  assert.deepEqual(
+    checkMetadataFields(
+      lockWithEntry({ version: '1.0.0', resolved: 'file:../local', integrity: 'sha512-abc==' }),
+    ),
+    [],
+  );
+});
+
+// Deliberate: a remote tarball on another host is a dependency Dependabot
+// and npm audit cannot see, even with valid integrity. Documented in
+// checkMetadataFields' contract and docs/supply-chain.md.
+test('checkMetadataFields rejects a remote tarball on another host despite valid sha512', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({
+      version: '1.0.0',
+      resolved: 'https://example.com/pkg/-/pkg-1.0.0.tgz',
+      integrity: 'sha512-abc==',
+    }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.equal(offenders[0].kind, 'provenance');
+  assert.match(offenders[0].reason, /does not point at 'registry\.npmjs\.org'/);
+  assert.match(offenders[0].reason, /Remote tarballs from other hosts are not allowed/);
+  assert.ok(!/example\.com/.test(offenders[0].reason), 'the host must not be echoed');
+});
+
+test('every committed lockfile entry resolves to the public registry with sha512', () => {
+  for (const file of ['package-lock.json', 'api/package-lock.json']) {
+    const lock = JSON.parse(readFileSync(resolve(repoRoot, file), 'utf8'));
+    assert.deepEqual(checkMetadataFields(lock), [], `${file} has metadata offenders`);
+  }
+});
+
+// The two branches carry OPPOSITE remediations, and printing the
+// regeneration recipe for a provenance failure would cause the exact
+// version-floating harm the gate exists to prevent. Asserting `kind` alone
+// cannot catch that -- only reading the emitted text can.
+function captureStderr(run) {
+  const original = console.error;
+  const lines = [];
+  console.error = (...parts) => lines.push(parts.join(' '));
+  try {
+    run();
+  } finally {
+    console.error = original;
+  }
+  return lines.join('\n');
+}
+
+const WORKSPACE = { name: 'root', lockfile: 'package-lock.json', manifest: 'package.json' };
+const REGENERATION_RECIPE = /rm -rf node_modules|Remove-Item|--package-lock-only --ignore-scripts/;
+
+test('printMetadataMessage gives provenance failures in-place repair, never regeneration', () => {
+  const output = captureStderr(() =>
+    printMetadataMessage(WORKSPACE, [
+      {
+        path: 'node_modules/x',
+        kind: 'provenance',
+        reason: "`integrity` is 'sha1', expected 'sha512'",
+      },
+    ]),
+  );
+  assert.match(output, /invalid provenance\/digest/);
+  assert.match(output, /repair these entries IN PLACE/);
+  assert.match(output, /npm view <name>@<version> dist\.tarball dist\.integrity/);
+  assert.ok(
+    !REGENERATION_RECIPE.test(output),
+    `provenance guidance must not include the regeneration recipe:\n${output}`,
+  );
+  assert.ok(!/missing metadata/.test(output), 'must not print the missing-metadata header');
+});
+
+test('printMetadataMessage gives missing metadata the regeneration recipe', () => {
+  const output = captureStderr(() =>
+    printMetadataMessage(WORKSPACE, [
+      { path: 'node_modules/x', kind: 'missing', reason: 'missing `resolved` and `integrity`' },
+    ]),
+  );
+  assert.match(output, /missing metadata/);
+  assert.match(output, REGENERATION_RECIPE);
+  assert.ok(!/IN PLACE/.test(output), 'must not print the in-place guidance');
+});
+
+test('printMetadataMessage emits both sections for mixed failure kinds', () => {
+  const output = captureStderr(() =>
+    printMetadataMessage(WORKSPACE, [
+      { path: 'node_modules/a', kind: 'missing', reason: 'missing `integrity`' },
+      { path: 'node_modules/b', kind: 'provenance', reason: '`resolved` points elsewhere' },
+    ]),
+  );
+  assert.match(output, /missing metadata/);
+  assert.match(output, /invalid provenance\/digest/);
+  assert.match(output, REGENERATION_RECIPE);
+  assert.match(output, /repair these entries IN PLACE/);
+  assert.match(output, /node_modules\/a/);
+  assert.match(output, /node_modules\/b/);
+});
+
+test('printMetadataMessage treats an untagged offender as missing, not provenance', () => {
+  // Defensive: the reporter filters on `!== 'provenance'`, so a future kind
+  // surfaces with conservative advice rather than being dropped silently.
+  const output = captureStderr(() =>
+    printMetadataMessage(WORKSPACE, [{ path: 'node_modules/x', reason: 'no kind set' }]),
+  );
+  assert.match(output, /missing metadata/);
+  assert.match(output, /node_modules\/x/);
+});
 
 test('checkVersionInSync returns null when pkg and lock agree', () => {
   const pkg = { name: 'jotjson', version: '0.26.2' };
