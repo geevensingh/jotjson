@@ -63,6 +63,20 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Lint - Lockfile metadata
+        # Runs BEFORE `npm ci` on purpose: it is dependency-free pure Node,
+        # and the whole point is to inspect the lockfile we are about to
+        # install from. Covers the two invariants `npm ci` does NOT enforce
+        # -- root `version` drift and `resolved`/`integrity` presence
+        # (issue #509) -- so unlike the full `lint:lockfile` gate it is not
+        # redundant with the `npm ci` step below.
+        #
+        # Scope note: this is a merge gate plus defense-in-depth ordering,
+        # not a guarantee that no unverified install runs anywhere. Other
+        # jobs still `npm ci` concurrently, and anyone able to edit the
+        # lockfile in a PR can also edit this workflow.
+        id: lint-lockfile-metadata
+        run: npm run lint:lockfile-metadata
       - run: npm ci
       - name: Install api/ dependencies (cross-workspace knip)
         # The web job's npm ci installs only the root workspace. knip runs
@@ -144,6 +158,69 @@ jobs:
         id: lint-sw-shape
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:sw-shape
+      - name: Lint - Vitest launch args
+        # Issue #533. Static gate over the Chromium launch-args funnel in
+        # vitest.shared.mts. Asserts COMMON_LAUNCH_ARGS membership, the
+        # exact `[...COMMON_LAUNCH_ARGS, ...extraArgs]` composition on the
+        # object makeBrowserConfig() actually returns, and the absence of
+        # the PR #418 `instances[].launch` shape that
+        # @vitest/browser-playwright silently ignores.
+        #
+        # It needs its own step because CI runs the individual lint:*
+        # scripts, not the compound `npm run lint`, so a gate that exists
+        # only in the chain never executes here. That matters more than
+        # usual for this one: every job runs on a bare ubuntu-latest VM
+        # with no container, where --no-sandbox and --disable-dev-shm-usage
+        # are inert, so a silently dropped launch arg fails no test
+        # anywhere. This step is the only thing that would catch it.
+        #
+        # Pure static analysis of source text -- no node_modules, no
+        # browser -- so it is fast and order-independent.
+        id: lint-launch-args
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:launch-args
+      - name: Lint - Dependency overrides
+        # Issue #514. Two-part gate over the root `overrides` block:
+        #   Part A -- every override must be classified (dev-only /
+        #             prod-graph / shipped-prebuilt) and justified with a
+        #             named consumer in OVERRIDE_POLICY.
+        #   Part B -- for packages that ship vendored inside a prebuilt
+        #             asset (today: DOMPurify inside monaco-editor's
+        #             min/vs, which angular.json copies to /vs), read the
+        #             version out of the bytes we actually ship and assert
+        #             no override contradicts it.
+        # Catches the class of "fix" where bumping an override closes
+        # Dependabot alerts without changing a single shipped byte -- and
+        # which can additionally hide advisories affecting the older
+        # shipped copy. Requires node_modules, so it must run after
+        # `npm ci` (it does; the install is at the top of this job).
+        id: lint-dependency-overrides
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:dependency-overrides
+      - name: Lint - Dependabot config
+        # Issue #506 / #536. Structural gate over `.github/dependabot.yml`.
+        # The motivating defect was an invisible default contradicting a
+        # visible comment: `groups.*.applies-to` defaults to
+        # `version-updates`, so the `angular` group -- whose comment said it
+        # existed to make Angular land as "a single mergeable change" --
+        # silently did not apply to security updates. Four advisories
+        # produced four single-package PRs, every one unmergeable at
+        # `npm ci` because the runtime peer-locks with exact pins.
+        #
+        # Asserts: explicit applies-to on every group; no update-types on a
+        # security group (structurally broken there -- the SemVer gate
+        # compares against latest_version, which security-path ignores
+        # cannot lower); every group classified in GROUP_POLICY with a kind
+        # and security posture; every ignore entry classified in
+        # IGNORE_POLICY, with the security-suppressing `versions:` form
+        # required to declare itself; and cross-checks against
+        # PEER_LOCKED_FAMILIES in check-lockfile.mjs so prevention (the
+        # group) and detection (the lockstep assertion) describe the same
+        # family. Pure function of the working tree -- no node_modules
+        # beyond js-yaml, which the job has already installed.
+        id: lint-dependabot-config
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:dependabot-config
       - name: Lint - Unused code
         # knip-driven detection of orphan npm deps, unused exports/types,
         # and unused files across the root SPA + api/ workspaces. All
@@ -191,11 +268,11 @@ jobs:
         # Covers every lint gate above plus the Script tests and Perf
         # script tests phases. When a new gate is added, append its
         # outcome to the env block below and its emit row to the run
-        # script. The trailing "All N gates passed" line still uses a
-        # hand-maintained literal pending issue #429 (replace with a
-        # derived count) -- bump the literal too.
+        # script. The totals are derived from the emit calls themselves
+        # (issue #429), so adding a row needs no hand-maintained count.
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         env:
+          OUTCOME_LOCKFILE_METADATA: ${{ steps.lint-lockfile-metadata.outcome }}
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
           OUTCOME_TSC_SPEC: ${{ steps.lint-tsc-spec.outcome }}
           OUTCOME_TSC_PERF_L2: ${{ steps.lint-tsc-perf-l2.outcome }}
@@ -206,12 +283,17 @@ jobs:
           OUTCOME_SWA_CONFIG: ${{ steps.lint-swa-config.outcome }}
           OUTCOME_FRESHNESS_CLI: ${{ steps.lint-deploy-freshness-cli.outcome }}
           OUTCOME_SW_SHAPE: ${{ steps.lint-sw-shape.outcome }}
+          OUTCOME_LAUNCH_ARGS: ${{ steps.lint-launch-args.outcome }}
+          OUTCOME_DEPENDENCY_OVERRIDES: ${{ steps.lint-dependency-overrides.outcome }}
+          OUTCOME_DEPENDABOT_CONFIG: ${{ steps.lint-dependabot-config.outcome }}
           OUTCOME_UNUSED: ${{ steps.lint-unused.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
           OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
           OUTCOME_TEST_PERF_SCRIPTS: ${{ steps.test-perf-scripts.outcome }}
         run: |
           fail=0
+          lint_total=0
+          test_total=0
           {
             echo "## Lint and script-test results"
             echo ""
@@ -219,6 +301,12 @@ jobs:
               local label="$1"
               local outcome="$2"
               local fix="$3"
+              local kind="${4:-lint}"
+              if [ "$kind" = "lint" ]; then
+                lint_total=$((lint_total + 1))
+              else
+                test_total=$((test_total + 1))
+              fi
               if [ "$outcome" = "success" ]; then
                 echo "- :white_check_mark: ${label}"
               elif [ "$outcome" = "failure" ]; then
@@ -228,6 +316,7 @@ jobs:
                 echo "- :grey_question: ${label} (${outcome})"
               fi
             }
+            emit "Lockfile metadata"        "$OUTCOME_LOCKFILE_METADATA" "npm run lint:lockfile-metadata - read the failure header: 'missing metadata' means an entry lost resolved/integrity (remove node_modules, delete the lockfile, then npm install --package-lock-only --ignore-scripts); 'invalid provenance/digest' means an entry names a non-public registry or a weak digest and must be repaired IN PLACE - do NOT regenerate, see the step output and docs/supply-chain.md"
             emit "TypeScript (tsc)"        "$OUTCOME_TSC"          "fix the type error reported above"
             emit "TypeScript specs (tsc)"  "$OUTCOME_TSC_SPEC"     "fix the type error reported above"
             emit "TypeScript perf L2 (tsc)" "$OUTCOME_TSC_PERF_L2" "fix the type error reported above (tsconfig.perf-l2.json)"
@@ -238,15 +327,18 @@ jobs:
             emit "SWA config"              "$OUTCOME_SWA_CONFIG"   "npm run lint:swa-config - fix the assertion failure printed above; see scripts/check-swa-config.mjs"
             emit "Deploy freshness CLI"    "$OUTCOME_FRESHNESS_CLI" "npm run lint:deploy-freshness-cli - workflow argv must match scripts/check-deploy-freshness.mjs CLI; see error printed above"
             emit "SW shape"                "$OUTCOME_SW_SHAPE"     "npm run lint:sw-shape - if src/sw.worker.ts changed intentionally, update EXPECTED_SW_SOURCE_SHA256 in scripts/check-sw-shape.mjs"
+            emit "Vitest launch args"      "$OUTCOME_LAUNCH_ARGS"  "npm run lint:launch-args - vitest.shared.mts must keep COMMON_LAUNCH_ARGS intact and return provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }); never pass flags via instances[].launch (PR #418)"
+            emit "Dependency overrides"   "$OUTCOME_DEPENDENCY_OVERRIDES" "npm run lint:dependency-overrides - classify the new override in OVERRIDE_POLICY (scripts/check-dependency-overrides.mjs), or, if it targets a package vendored inside a prebuilt asset, remove the override and bump the vendoring package instead; see docs/supply-chain.md"
+            emit "Dependabot config"      "$OUTCOME_DEPENDABOT_CONFIG" "npm run lint:dependabot-config - every group needs an explicit applies-to and a GROUP_POLICY entry; every ignore needs an IGNORE_POLICY entry; security groups must not carry update-types (scripts/check-dependabot-config.mjs); see docs/supply-chain.md -> Grouped security updates"
             emit "Unused code"             "$OUTCOME_UNUSED"       "npm run lint:unused - either remove the unused export/dep/file, add a workspace 'entry' pattern (for files reachable only via a runtime convention knip can't see, e.g. Playwright's testDir), or add the dep to knip.jsonc ignoreDependencies (or ignoreBinaries, for CLI tools invoked from scripts); every allowlist addition needs a rationale comment naming the specific (not generic) mechanism by which the dep/entry is used"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
-            emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
-            emit "Perf script tests"       "$OUTCOME_TEST_PERF_SCRIPTS" "npm run test:perf-scripts - then fix the failing assertion in perf/fixtures/*.test.mjs"
+            emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs" test
+            emit "Perf script tests"       "$OUTCOME_TEST_PERF_SCRIPTS" "npm run test:perf-scripts - then fix the failing assertion in perf/fixtures/*.test.mjs" test
             echo ""
             if [ "$fail" -eq 1 ]; then
               echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 13 gates passed (11 lint + script tests + perf script tests)."
+              echo "All $((lint_total + test_total)) gates passed (${lint_total} lint + ${test_total} script-test)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts
@@ -432,7 +524,7 @@ jobs:
       - name: Mergify CI Upload (api unit)
         if: steps.run-api-tests.outcome == 'success' || steps.run-api-tests.outcome == 'failure'
         continue-on-error: true
-        uses: mergifyio/gha-mergify-ci@v20
+        uses: mergifyio/gha-mergify-ci@v22
         with:
           token: ${{ secrets.MERGIFY_TOKEN }}
           report_path: api/test-results/api/junit.xml
@@ -547,7 +639,7 @@ jobs:
       - name: Mergify CI Upload (api integration)
         if: (steps.run-api-integration.outcome == 'success' || steps.run-api-integration.outcome == 'failure') && steps.cosmos-preflight.outputs.enabled == 'true'
         continue-on-error: true
-        uses: mergifyio/gha-mergify-ci@v20
+        uses: mergifyio/gha-mergify-ci@v22
         with:
           token: ${{ secrets.MERGIFY_TOKEN }}
           report_path: api/test-results/api-integration/junit.xml
@@ -672,7 +764,7 @@ jobs:
       - name: Mergify CI Upload (web unit)
         if: steps.run-web-tests.outcome == 'success' || steps.run-web-tests.outcome == 'failure'
         continue-on-error: true
-        uses: mergifyio/gha-mergify-ci@v20
+        uses: mergifyio/gha-mergify-ci@v22
         with:
           token: ${{ secrets.MERGIFY_TOKEN }}
           report_path: test-results/web/junit.xml
@@ -745,7 +837,7 @@ jobs:
       - name: Mergify CI Upload (e2e)
         if: steps.run-e2e-tests.outcome == 'success' || steps.run-e2e-tests.outcome == 'failure'
         continue-on-error: true
-        uses: mergifyio/gha-mergify-ci@v20
+        uses: mergifyio/gha-mergify-ci@v22
         with:
           token: ${{ secrets.MERGIFY_TOKEN }}
           report_path: test-results/e2e/junit.xml

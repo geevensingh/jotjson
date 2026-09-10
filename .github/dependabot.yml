@@ -32,13 +32,100 @@ updates:
     ignore:
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # The Vitest family is capped at 4.x by @analogjs/vitest-angular,
+      # which peers `vitest: "^1.3.1 || ^2.0.0 || ^3.0.0 || ^4.0.0"`. It is
+      # not in the `vitest` group below because it also peers
+      # @angular-devkit/architect, so it straddles the vitest and angular
+      # families and no grouping assigns it correctly.
+      #
+      # Without these ignores the group would happily propose a 5.x bump
+      # that can never install: npm ERESOLVEs against the ^4 peer, and
+      # AGENTS.md Section 2 forbids working around that with
+      # --legacy-peer-deps or --force. That is a recurring unmergeable PR,
+      # not a useful signal.
+      #
+      # Same shape as the jwks-rsa entry in the api/ ecosystem below: block
+      # a known-unmergeable major and record the unblock condition. Remove
+      # these entries once @analogjs/vitest-angular publishes a peer range
+      # admitting vitest 5, then bump the family and Analog together.
+      - dependency-name: 'vitest'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@vitest/*'
+        update-types: ['version-update:semver-major']
+      # Angular 22 requires TypeScript 6 (@angular/compiler-cli@22 peers
+      # typescript >=6.0; @angular-devkit/build-angular@21.x already caps at
+      # <6.0), and this repo pins typescript ~5.9.3. Until that migration
+      # lands (#550) a major cannot install.
+      #
+      # Unlike the other entries here, this one is not only about blocking an
+      # unmergeable PR -- an ungated Angular major actively STARVES the
+      # 21.2.x patch train. Version updates always target
+      # `checker.latest_version`, and `update-types` on a group only *routes*
+      # a candidate rather than retargeting it, so with 22.x published the
+      # `angular` group proposes 22.x or nothing. `ignore` is the only key
+      # that lowers `latest_version` (via `filter_ignored_versions`). That
+      # matters because the ten @angular/* runtime packages peer-lock with
+      # EXACT pins, which makes the version-update group PR the only vehicle
+      # that can deliver a mergeable lockstep security patch -- see
+      # docs/supply-chain.md -> "Grouped security updates".
+      #
+      # Scoped with update-types and never `versions:`. The two forms have
+      # opposite security semantics: `ignored_versions` short-circuits with
+      # `return versions if security_updates_only`, so an update-types entry
+      # contributes nothing to a security job and CANNOT mask an advisory,
+      # while a `versions:` entry would. See docs/supply-chain.md.
+      #
+      # The '@angular/*' glob also freezes @angular/material and
+      # @angular/cdk majors, crossing the carve-out the `angular` group
+      # draws below -- `ignore` has no exclude-patterns counterpart. Benign
+      # today (Material 22 peers @angular/core ^22 and could not install on
+      # Angular 21 anyway), but stated so that removing these entries later
+      # does not silently unfreeze Material as a side effect.
+      #
+      # @angular-devkit is enumerated rather than globbed because
+      # @angular-devkit/architect and /build-webpack version as `0.2102.x`:
+      # `ignored_major_versions` increments segment 0, emitting ">= 1.a",
+      # which does not gate the Angular 22 line (`0.2200.x`) at all. Both
+      # are transitive-only today, so a glob would imply coverage the
+      # mechanism does not provide.
+      - dependency-name: '@angular/*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@angular-devkit/build-angular'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@angular-devkit/core'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@angular-devkit/schematics'
+        update-types: ['version-update:semver-major']
     groups:
       # Angular runtime + dev tooling are peer-locked: @angular/compiler-cli
       # and friends must match @angular/* exactly. Bundle every @angular/* and
       # @angular-devkit/* package (regardless of dependency-type) into one PR
       # so a single Angular release lands as a single mergeable change.
       # Material/CDK are released on a separate cadence and stay carved out.
+      #
+      # `applies-to` is explicit on every group in this file. It defaults to
+      # `version-updates`, and that invisible default is what issue #506 was
+      # filed about: security-driven PRs silently bypassed this group and
+      # arrived one-per-package.
+      #
+      # The `-security` counterpart below consolidates those into one PR, but
+      # does NOT make them mergeable, and the difference matters when triaging.
+      # A security job filters group membership down to only the packages
+      # carrying an alert, so a grouped Angular security PR bumps the alerted
+      # subset and leaves the rest of the exact-pin cluster behind -- still an
+      # `npm ci` ERESOLVE. It is a consolidated alarm, not a fix; the remedy
+      # is a lockstep bump via this version-update group (or by hand).
+      # See docs/supply-chain.md -> "Grouped security updates".
       angular:
+        applies-to: version-updates
+        patterns:
+          - '@angular/*'
+          - '@angular-devkit/*'
+        exclude-patterns:
+          - '@angular/material'
+          - '@angular/cdk'
+      angular-security:
+        applies-to: security-updates
         patterns:
           - '@angular/*'
           - '@angular-devkit/*'
@@ -46,12 +133,94 @@ updates:
           - '@angular/material'
           - '@angular/cdk'
       material:
+        applies-to: version-updates
         patterns:
           - '@angular/material'
           - '@angular/cdk'
-      # dev-minor catches everything else dev-typed; keep @angular packages
-      # out so they always route to the angular group above.
+      # Same alarm-not-a-fix caveat as angular-security: @angular/material
+      # peers @angular/cdk at an exact version, so a security PR alerting
+      # only one of the pair cannot install.
+      material-security:
+        applies-to: security-updates
+        patterns:
+          - '@angular/material'
+          - '@angular/cdk'
+      # The Vitest toolchain is peer-locked at an EXACT version, in both
+      # directions: @vitest/browser-playwright peers vitest exactly and
+      # depends on @vitest/browser exactly; @vitest/coverage-v8 peers vitest
+      # exactly (and @vitest/browser exactly, though that peer is optional);
+      # and vitest itself peers back on @vitest/browser-playwright and
+      # @vitest/coverage-v8 at exact versions. A partial bump cannot resolve.
+      #
+      # Why this group exists (issue #533): these packages previously sat in
+      # dev-minor. PR #491 lifted @vitest/browser-playwright and
+      # @vitest/coverage-v8 4.1.7 -> 4.1.10 as incidental riders there; when
+      # that group PR was superseded by the regenerated #523, the @vitest/*
+      # bumps were dropped entirely while co-tenants survived. Two critical
+      # @vitest/browser advisories stayed open with no signal that their
+      # remediation had vanished. Isolating the family means a dropped bump is
+      # a visibly absent PR rather than three quietly missing lines inside a
+      # large one.
+      #
+      # Scope limits, stated so the next reader does not over-trust this:
+      #   - VERSION UPDATES ONLY. Dependabot groups default to
+      #     `applies-to: version-updates`, and one group cannot serve both
+      #     paths. That is the correct scope here: the security updater cannot
+      #     remediate @vitest/browser at all, because it is transitive and its
+      #     parent pins it exactly -- which is why #533 reports no PR. A
+      #     sibling `applies-to: security-updates` group would be inert.
+      #   - 4.x LOCKSTEP ONLY. @analogjs/vitest-angular peers vitest at
+      #     ^4.0.0 and is NOT in this group: it also peers
+      #     @angular-devkit/architect, so it straddles the vitest and angular
+      #     families and no grouping assigns it correctly. Vitest majors are
+      #     therefore blocked via the `ignore` entries above rather than
+      #     grouped, since a 5.x group PR could not install. Lifting that
+      #     block requires bumping Analog in the same change.
+      #
+      # update-types is deliberately omitted (matching the angular group): the
+      # exact peer pins break identically at patch, minor, and major, so
+      # restricting by update-type would reopen the hole where it hurts most.
+      #
+      # See docs/supply-chain.md -> "Peer-locked dependency families".
+      #
+      # No `vitest-security` counterpart: the security updater cannot
+      # remediate @vitest/browser at all (transitive, exact-pinned by its
+      # parent), so a sibling security group would be inert. Recorded in
+      # GROUP_POLICY in scripts/check-dependabot-config.mjs rather than
+      # satisfied with an empty group.
+      vitest:
+        applies-to: version-updates
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
+      # playwright + @playwright/test are exact-linked rather than
+      # peer-locked: @playwright/test depends on `playwright` at an exact
+      # version, which depends on `playwright-core` at an exact version. A
+      # partial bump nests a duplicate copy, so the lockstep requirement is
+      # the same and docs/supply-chain.md's rule applies: family group,
+      # dev-minor exclusion, and a PEER_LOCKED_FAMILIES assertion.
+      #
+      # This family also determines the Chromium binary the Vitest
+      # browser-mode suite runs against, because
+      # .github/actions/install-playwright-chromium derives its cache key
+      # from the resolved root `playwright` version and is used by both the
+      # e2e job and the web unit tests. #537 tracks moving it; grouping
+      # means that move arrives as one mergeable PR rather than a split
+      # family rejected after the fact.
+      #
+      # No `playwright-security` counterpart, same reasoning as vitest: the
+      # exact-link runs parent -> child, so an alerted child cannot be
+      # remediated standalone. Recorded in GROUP_POLICY.
+      playwright:
+        applies-to: version-updates
+        patterns:
+          - 'playwright'
+          - '@playwright/test'
+      # dev-minor catches everything else dev-typed; keep @angular,
+      # @vitest, and playwright packages out so they always route to the
+      # family groups above.
       dev-minor:
+        applies-to: version-updates
         dependency-type: development
         update-types:
           - minor
@@ -59,6 +228,48 @@ updates:
         exclude-patterns:
           - '@angular/*'
           - '@angular-devkit/*'
+          - 'vitest'
+          - '@vitest/*'
+          - 'playwright'
+          - '@playwright/test'
+      # The security-path counterpart to dev-minor, and the one group here
+      # that produces a genuinely mergeable consolidated PR: dev-scoped
+      # packages are not peer-locked, so a partial bump resolves fine.
+      #
+      # `update-types` is deliberately omitted (it is NOT a copy of
+      # dev-minor's). Two reasons:
+      #   1. For a security fix you want the patch regardless of whether it
+      #      lands as a patch, minor, or major -- constraining it would leak
+      #      stragglers back out into individual PRs.
+      #   2. On the security path `update-types` is structurally broken.
+      #      `semver_rules_allow_grouping?` compares against
+      #      `checker.latest_version` (the registry's newest release), and
+      #      security-path ignores are inert, so `latest_version` can never be
+      #      lowered by config. Any package whose latest release is a major
+      #      ahead would be rejected from the group and fall through to an
+      #      individual PR -- reproducing #506. GitHub's own documented
+      #      Example 4 gets this wrong; do not copy it.
+      #
+      # exclude-patterns must stay in sync with dev-minor above (enforced by
+      # scripts/check-dependabot-config.mjs).
+      #
+      # Scope note: `dependency-type: development` matches Dependabot's
+      # `Dependency#production?`, which is NOT the same as "dev dependency".
+      # A transitive with no subdependency metadata defaults to production,
+      # so packages like undici, brace-expansion and shell-quote are
+      # dev-only in reality but production to Dependabot and will not be
+      # claimed by this group. The PR title scope -- `(deps)` vs
+      # `(deps-dev)` -- reports the classification directly.
+      dev-security:
+        applies-to: security-updates
+        dependency-type: development
+        exclude-patterns:
+          - '@angular/*'
+          - '@angular-devkit/*'
+          - 'vitest'
+          - '@vitest/*'
+          - 'playwright'
+          - '@playwright/test'
 
   - package-ecosystem: npm
     directory: /api
@@ -97,13 +308,29 @@ updates:
         update-types: ['version-update:semver-major']
     groups:
       azure-sdk:
+        applies-to: version-updates
+        patterns:
+          - '@azure/*'
+      # @azure/* packages peer each other on caret ranges rather than exact
+      # pins, so unlike the angular/material counterparts a grouped security
+      # PR here is genuinely mergeable.
+      azure-sdk-security:
+        applies-to: security-updates
         patterns:
           - '@azure/*'
       dev-minor:
+        applies-to: version-updates
         dependency-type: development
         update-types:
           - minor
           - patch
+      # Security counterpart to dev-minor. `update-types` omitted for the
+      # same two reasons as the root dev-security group above: take a
+      # security fix regardless of SemVer shape, and `update-types` is
+      # structurally broken on the security path.
+      dev-security:
+        applies-to: security-updates
+        dependency-type: development
 
   - package-ecosystem: github-actions
     directory: /
