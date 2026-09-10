@@ -653,6 +653,32 @@ for the iteration loop.
   vulnerable member is a *transitive* that appears nowhere in
   `package.json` -- see `docs/supply-chain.md` -> "Peer-locked
   dependency families" and issue #533.
+- **Dependabot groups do not apply to security updates unless you say
+  so.** `groups.*.applies-to` defaults to `version-updates`, and that
+  invisible default is issue #506: the `angular` group's comment claimed
+  it made Angular land as one mergeable change, while four security
+  advisories produced four single-package PRs that could not install.
+  Every group must declare `applies-to` explicitly; the invariants below
+  are enforced by `scripts/check-dependabot-config.mjs` (`GROUP_POLICY`
+  and `IGNORE_POLICY`, the `OVERRIDE_POLICY` idiom):
+  - **A `-security` group consolidates the alarm; it does not fix it.**
+    Security jobs filter group membership to *alerted* packages only, so
+    a grouped PR for an exact-pin family still leaves un-alerted members
+    behind and fails `npm ci`. The remedy is a lockstep bump via the
+    version-update group or by hand. Do not write config comments that
+    promise otherwise.
+  - **Never put `update-types` on a `security-updates` group.** The
+    SemVer gate compares against `checker.latest_version`, which
+    security-path ignores cannot lower, so any package with a newer major
+    is silently ejected into an individual PR. GitHub's documented
+    Example 4 shows this pattern; it is wrong.
+  - **The two forms of `ignore` have opposite security semantics.** An
+    `update-types`-scoped entry does **not** suppress security updates; an
+    entry carrying `versions:` **does** and can mask a live advisory.
+    Prefer `update-types`; if you need `versions:`, mark it
+    `suppressesSecurity: true` in `IGNORE_POLICY`.
+  See `docs/supply-chain.md` -> "Grouped security updates" for the
+  mechanism, the Angular-major rationale, and the alarm-PR runbook.
 - All API routes that mutate or read user data require a valid Entra External ID
   token except
   the explicitly-public blob read path.
@@ -705,7 +731,8 @@ Before finishing a task:
    `tsc --noEmit -p tsconfig.app.json` + `tsc --noEmit -p tsconfig.spec.json`
    + `check-ascii.mjs`,
    `check-spec-patterns.mjs`, `check-prod-patterns.mjs`,
-   `check-lockfile.mjs`, `check-dependency-overrides.mjs`, and
+   `check-lockfile.mjs`, `check-dependency-overrides.mjs`,
+   `check-dependabot-config.mjs`, and
    `check-format.mjs` (the prettier
    annotation wrapper - `npm run format:check` is the equivalent for
    direct invocation).
@@ -718,6 +745,7 @@ Before finishing a task:
    `npm run lint:ascii`,
    `npm run lint:spec-patterns`, `npm run lint:prod-patterns`,
    `npm run lint:dependency-overrides`,
+   `npm run lint:dependabot-config`,
    `npm run lint:format`. (The full `lint:lockfile` gate is
    intentionally **not** a separate CI step: its slow phase runs
    `npm ci --dry-run`, and CI's job-level `npm ci` already enforces
