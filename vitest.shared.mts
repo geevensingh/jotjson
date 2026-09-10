@@ -87,6 +87,16 @@ export const sharedTestBase = {
 } as const;
 
 /**
+ * Fields `makeBrowserConfig` refuses to let a caller replace.
+ *
+ * `provider` carries the launch-args funnel; `instances` is where the
+ * PR #418 `launch` shape would re-enter. `enabled`/`headless` ride along
+ * because a browser block that is off or headed is not the harness the
+ * rest of this file describes.
+ */
+type ProtectedBrowserFields = 'enabled' | 'headless' | 'provider' | 'instances';
+
+/**
  * Build a `browser` config block for Vitest. Funneling all
  * provider creation through this helper guarantees launch args
  * actually reach Chromium (see `COMMON_LAUNCH_ARGS` comment).
@@ -95,14 +105,24 @@ export const sharedTestBase = {
  *   `COMMON_LAUNCH_ARGS`. The L2 perf bench adds
  *   `--js-flags=--expose-gc`; the unit suite passes `[]`.
  * @param overrides Optional extra browser-block fields (e.g.,
- *   `fileParallelism: false`, `onConsoleLog`). Merged shallow on
- *   top of the returned object.
+ *   `fileParallelism: false`, `onConsoleLog`). Spread *below* the
+ *   protected fields, so it can add but never replace them.
  */
 export function makeBrowserConfig(
   extraArgs: readonly string[] = [],
-  overrides: Partial<BrowserConfigOptions> = {},
+  overrides: Omit<Partial<BrowserConfigOptions>, ProtectedBrowserFields> = {},
 ): BrowserConfigOptions {
+  // `overrides` is spread FIRST so the protected fields below always win.
+  //
+  // It used to be spread last, which silently defeated the guarantee this
+  // helper exists to provide: a caller could pass a replacement `provider`
+  // (dropping COMMON_LAUNCH_ARGS) or an `instances` array carrying the
+  // ignored `launch` field, and `check-launch-args` -- which validates the
+  // literal written here -- would still pass. The `Omit` above makes that
+  // a compile error; the spread order makes it impossible at runtime even
+  // from untyped callers.
   return {
+    ...overrides,
     enabled: true,
     headless: true,
     provider: playwright({
@@ -111,6 +131,5 @@ export function makeBrowserConfig(
       },
     }),
     instances: [{ browser: 'chromium' }],
-    ...overrides,
   };
 }

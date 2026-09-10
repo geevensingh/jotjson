@@ -227,6 +227,40 @@ test('accepts a helper whose every return path is correct', () => {
   assert.deepEqual(lintSharedConfig(helper(body)), []);
 });
 
+// A spread after a protected field lets a caller replace it, and the gate
+// -- which validates the literal -- would still pass. This is the hole that
+// existed in vitest.shared.mts itself: `...overrides` came last.
+test('flags a spread after the provider property', () => {
+  const body = `return { ${GOOD_RETURN.slice('return { '.length, -3)}, ...overrides };`;
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /spreads `overrides` after `provider`/);
+});
+
+test('flags a spread after the instances property', () => {
+  const body = [
+    'return {',
+    '    provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }),',
+    "    instances: [{ browser: 'chromium' }],",
+    '    ...overrides,',
+    '  };',
+  ].join('\n');
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /after `provider`|after `instances`/);
+});
+
+test('accepts a spread that comes before the protected fields', () => {
+  const body = [
+    'return {',
+    '    ...overrides,',
+    '    provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }),',
+    "    instances: [{ browser: 'chromium' }],",
+    '  };',
+  ].join('\n');
+  assert.deepEqual(lintSharedConfig(helper(body)), []);
+});
+
 test('flags a bare `return;` path', () => {
   const body = ['if (skip) return;', `  ${GOOD_RETURN}`].join('\n');
   const violations = lintSharedConfig(helper(body));
@@ -368,6 +402,53 @@ test('lintInstancesLaunch ignores the shape inside a regex literal', () => {
 test('lintInstancesLaunch ignores a commented-out launch', () => {
   const source = "// instances: [{ browser: 'chromium', launch: { args: [] } }],";
   assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+// `['launch']` creates exactly the same runtime property as `launch:`, and
+// @vitest/browser-playwright ignores it identically.
+test('lintInstancesLaunch flags a computed string key', () => {
+  const source = "const c = { instances: [{ browser: 'chromium', ['launch']: { args: [] } }] };";
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+test('lintInstancesLaunch flags a computed template key', () => {
+  const source = 'const c = { instances: [{ [`launch`]: {} }] };';
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+// A shorthand assignment puts the array in a separate binding, which the
+// gate previously skipped entirely.
+test('lintInstancesLaunch resolves a shorthand instances binding', () => {
+  const source = [
+    'const instances = [{ launch: {} }];',
+    'export default defineConfig({ instances });',
+  ].join('\n');
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+test('lintInstancesLaunch resolves a named instances binding', () => {
+  const source = [
+    'const list = [{ launch: {} }];',
+    'export default defineConfig({ instances: list });',
+  ].join('\n');
+  assert.equal(lintInstancesLaunch(source, 'x.mts').length, 1);
+});
+
+test('lintInstancesLaunch accepts a clean shorthand binding', () => {
+  const source = [
+    "const instances = [{ browser: 'chromium' }];",
+    'export default defineConfig({ instances });',
+  ].join('\n');
+  assert.deepEqual(lintInstancesLaunch(source, 'x.mts'), []);
+});
+
+// An unresolvable value is reported rather than assumed clean -- the gate
+// cannot rule out the #418 shape behind a function call.
+test('lintInstancesLaunch reports an unresolvable instances value', () => {
+  const source = 'export default defineConfig({ instances: buildInstances() });';
+  const violations = lintInstancesLaunch(source, 'x.mts');
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /cannot resolve/);
 });
 
 test('lintInstancesLaunch still flags a real launch beside a string decoy', () => {

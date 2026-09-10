@@ -97,11 +97,31 @@ function parse(source, fileName) {
   return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 }
 
-/** Name of a property-assignment key, or null for computed/spread keys. */
+/**
+ * Name of a property-assignment key, or null when it cannot be resolved
+ * to a static string.
+ *
+ * Computed keys with a literal (`['launch']: ...`) are resolved, because
+ * JavaScript creates exactly the same runtime property as `launch:` and
+ * `@vitest/browser-playwright` ignores it identically. Only genuinely
+ * dynamic keys (`[expr]`) return null.
+ */
 function propertyName(node) {
-  if (!ts.isPropertyAssignment(node) && !ts.isShorthandPropertyAssignment(node)) return null;
+  if (
+    !ts.isPropertyAssignment(node) &&
+    !ts.isShorthandPropertyAssignment(node) &&
+    !ts.isMethodDeclaration(node)
+  ) {
+    return null;
+  }
   const name = node.name;
   if (ts.isIdentifier(name) || ts.isStringLiteral(name)) return name.text;
+  if (ts.isComputedPropertyName(name)) {
+    const expression = name.expression;
+    if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+      return expression.text;
+    }
+  }
   return null;
 }
 
@@ -346,6 +366,29 @@ function checkReturnedObject(returned, path, where, violations) {
     return;
   }
 
+  // A spread AFTER a protected field silently defeats everything below:
+  // `{ provider: playwright(...), ...overrides }` lets a caller replace the
+  // provider (dropping COMMON_LAUNCH_ARGS) or supply an `instances` array
+  // carrying the ignored PR #418 `launch` field, while this gate -- which
+  // validates the literal -- still passes. Protected fields must come last.
+  const properties = returned.properties;
+  for (const protectedName of ['provider', 'instances']) {
+    const index = properties.findIndex((prop) => propertyName(prop) === protectedName);
+    if (index === -1) continue;
+    const trailingSpread = properties.findIndex(
+      (prop, position) => position > index && ts.isSpreadAssignment(prop),
+    );
+    if (trailingSpread !== -1) {
+      violations.push(
+        `${path}: the object returned by \`${HELPER}(...)\`${where} spreads ` +
+          `\`${properties[trailingSpread].expression.getText()}\` after \`${protectedName}\`, ` +
+          `so a caller can replace it and this gate would still pass. Spread it before the ` +
+          `protected fields (and \`Omit\` them from the parameter type).`,
+      );
+      return;
+    }
+  }
+
   const call = providerProp.initializer;
   if (
     !ts.isCallExpression(call) ||
@@ -435,29 +478,72 @@ export function lintSharedConfig(source, path = SHARED_CONFIG) {
  * array entry is a violation, not just at the entry's top level. The field
  * is silently ignored wherever it appears, so flagging the whole subtree is
  * the tripwire PR #418 warranted.
+ *
+ * Resolves the array through a module-level binding, so
+ * `const instances = [{ launch: {} }]; defineConfig({ instances })` --
+ * a shorthand assignment whose value lives elsewhere -- is analyzed
+ * rather than skipped. A binding that cannot be resolved to an inline
+ * array is reported as unverifiable instead of being assumed clean.
  */
 export function lintInstancesLaunch(source, path) {
   const sourceFile = parse(source, path);
   let found = false;
+  let unverifiable = null;
+
+  /** Resolves an expression to an array literal, following identifiers. */
+  const resolveArray = (expression) => {
+    if (!expression) return null;
+    if (ts.isArrayLiteralExpression(expression)) return expression;
+    if (ts.isIdentifier(expression)) {
+      const declarations = topLevelVariableDeclarations(sourceFile, expression.text);
+      if (declarations.length === 1 && declarations[0].initializer) {
+        const initializer = unwrap(declarations[0].initializer);
+        if (ts.isArrayLiteralExpression(initializer)) return initializer;
+      }
+    }
+    return null;
+  };
 
   walk(sourceFile, (node) => {
     if (found) return;
-    if (!ts.isPropertyAssignment(node) || propertyName(node) !== 'instances') return;
-    if (!ts.isArrayLiteralExpression(node.initializer)) return;
-    for (const entry of node.initializer.elements) {
+    if (propertyName(node) !== 'instances') return;
+
+    // `instances: [...]`, `instances: someBinding`, or shorthand `instances`.
+    const value = ts.isShorthandPropertyAssignment(node)
+      ? node.name
+      : ts.isPropertyAssignment(node)
+        ? unwrap(node.initializer)
+        : null;
+    if (!value) return;
+
+    const array = resolveArray(value);
+    if (!array) {
+      unverifiable ??= value.getText().split('\n')[0];
+      return;
+    }
+    for (const entry of array.elements) {
       walk(entry, (inner) => {
         if (propertyName(inner) === 'launch') found = true;
       });
     }
   });
 
-  if (!found) return [];
-  return [
-    `${path}: found a \`launch\` field inside an \`instances: [...]\` entry. ` +
-      `@vitest/browser-playwright silently ignores it (PR #418). Pass launch flags through ` +
-      `${HELPER}()'s ${EXTRA_ARGS_PARAM} parameter instead, which funnels them into the ` +
-      `playwright({ launchOptions: { args } }) factory.`,
-  ];
+  if (found) {
+    return [
+      `${path}: found a \`launch\` field inside an \`instances: [...]\` entry. ` +
+        `@vitest/browser-playwright silently ignores it (PR #418). Pass launch flags through ` +
+        `${HELPER}()'s ${EXTRA_ARGS_PARAM} parameter instead, which funnels them into the ` +
+        `playwright({ launchOptions: { args } }) factory.`,
+    ];
+  }
+  if (unverifiable) {
+    return [
+      `${path}: \`instances\` is set from \`${unverifiable}\`, which this gate cannot resolve ` +
+        `to an inline array, so it cannot rule out the PR #418 \`launch\` shape. Declare the ` +
+        `array inline, or as a single module-level \`const\`.`,
+    ];
+  }
+  return [];
 }
 
 /** Returns the repo-root `vitest*.mts` config filenames, sorted. */

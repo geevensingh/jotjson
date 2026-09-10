@@ -396,20 +396,40 @@ test('checkMetadataFields flags an http:// resolved URL on the right host', () =
     lockWithEntry({ ...GOOD_ENTRY, resolved: 'http://registry.npmjs.org/x/-/x-1.0.0.tgz' }),
   );
   assert.equal(offenders.length, 1);
-  assert.match(offenders[0].reason, /expected 'https:\/\/'/);
+  assert.match(offenders[0].reason, /does not use the https:\/\/ scheme/);
   assert.equal(offenders[0].kind, 'provenance');
 });
 
-test('checkMetadataFields flags credentials embedded in the resolved URL', () => {
+// A non-standard scheme parses fine, so echoing it would leak a
+// secret-bearing protocol into public CI logs.
+test('checkMetadataFields does not echo the offending scheme', () => {
   const offenders = checkMetadataFields(
-    lockWithEntry({
-      ...GOOD_ENTRY,
-      resolved: 'https://user:token@registry.npmjs.org/x/-/x-1.0.0.tgz',
-    }),
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'SUPERSECRET://registry.npmjs.org/x/-/x-1.0.0.tgz' }),
   );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /does not use the https:\/\/ scheme/);
+  assert.ok(
+    !/supersecret/i.test(offenders[0].reason),
+    `reason leaked the scheme: ${offenders[0].reason}`,
+  );
+});
+
+test('checkMetadataFields flags credentials embedded in the resolved URL', () => {
+  // Built from parts so a secret-scanner redaction in a code-review UI
+  // cannot make this fixture *look* malformed. It is a valid URL: the
+  // assertions below prove it parses and carries userinfo, so the
+  // credentials branch is genuinely exercised rather than short-circuited
+  // by the earlier parse-failure branch.
+  const resolved = `https://user:token@${'registry.npmjs.org'}/x/-/x-1.0.0.tgz`;
+  const parsed = new URL(resolved);
+  assert.equal(parsed.username, 'user');
+  assert.equal(parsed.password, 'token');
+
+  const offenders = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, resolved }));
   assert.equal(offenders.length, 1);
   assert.match(offenders[0].reason, /embeds credentials/);
   assert.equal(offenders[0].kind, 'provenance');
+  assert.ok(!offenders[0].reason.includes('token'), 'must not echo the credential');
 });
 
 test('checkMetadataFields flags a username-only credential', () => {

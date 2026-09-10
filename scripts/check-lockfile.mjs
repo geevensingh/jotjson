@@ -290,10 +290,13 @@ export function checkMetadataFields(lock) {
     // cleartext, and embedded credentials would be committed in plain
     // text to a public repo -- both while naming the right host.
     if (url.protocol !== 'https:') {
+      // The scheme is not echoed either: `SUPERSECRET://registry.npmjs.org/...`
+      // parses successfully and would otherwise print a secret-bearing
+      // protocol into public CI logs.
       offenders.push({
         path,
         kind: 'provenance',
-        reason: `\`resolved\` uses '${url.protocol}//', expected 'https://'`,
+        reason: '`resolved` does not use the https:// scheme',
       });
       continue;
     }
@@ -497,9 +500,13 @@ export const PEER_LOCKED_FAMILIES = [
   // grouped them since before this gate existed; this is the matching
   // detection half.
   //
-  // No `followers`: unlike @vitest/browser, every member of this family is
-  // declared in package.json, so there is no exact-pinned transitive
-  // hiding behind a parent.
+  // The `declared` list below is the root-declared half of the family.
+  // The `followers` list is the transitive half -- packages pinned at the
+  // family version by a declared member but absent from package.json
+  // (see the follower list for which parent pins each). Both halves are
+  // asserted; an earlier revision of this comment claimed the family had
+  // no followers, which was wrong and made the transitive coverage look
+  // accidental.
   {
     name: 'angular',
     workspace: 'root',
