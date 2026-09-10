@@ -404,7 +404,11 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   private defineThemes(monaco: typeof MonacoNS): void {
     /*
      * Per-theme JSON syntax token rules (M7f-3a). Token names verified
-     * from Monaco's JSON tokenizer source (monaco-editor 0.55.1):
+     * from Monaco's JSON tokenizer source, re-checked at the 0.56.0
+     * bump (issue #524) - the file moved, the scope names did not:
+     *   0.55.1 `esm/vs/language/json/tokenization.js`
+     *   0.56.0 `esm/vs/languages/features/json/tokenization.js`
+     *
      *   string.value.json - JSON string values
      *   string.key.json   - JSON property names
      *   number.json       - JSON numbers (NOT plain "number")
