@@ -642,6 +642,17 @@ for the iteration loop.
   shipped copy. Bump the vendoring package instead. Every root override must
   be classified and justified in `scripts/check-dependency-overrides.mjs`;
   see `docs/supply-chain.md` and issue #514.
+- **Peer-locked dependency families move in lockstep.** Some packages
+  peer-depend on each other at an *exact* version (Angular runtime +
+  devkit; the Vitest toolchain), so no partial bump can resolve. Each
+  such family needs its own Dependabot group, an exclude from the
+  generic `dev-minor` group, and an entry in `PEER_LOCKED_FAMILIES` in
+  `scripts/check-lockfile.mjs`. The group is prevention and covers only
+  Dependabot's version-update path; the `check-lockfile.mjs` assertion
+  is detection and covers every inbound path. This matters most when the
+  vulnerable member is a *transitive* that appears nowhere in
+  `package.json` -- see `docs/supply-chain.md` -> "Peer-locked
+  dependency families" and issue #533.
 - All API routes that mutate or read user data require a valid Entra External ID
   token except
   the explicitly-public blob read path.
