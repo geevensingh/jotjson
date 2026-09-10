@@ -29,12 +29,26 @@ const projectRoot = fileURLToPath(new URL('.', import.meta.url));
  *
  * Historical note: PR #418 attempted to pass these via
  * `instances[].launch.args`, but `@vitest/browser-playwright`
- * silently ignores that field. The launch options are only read
- * from the `playwright({ launchOptions: { args: [...] } })` factory
- * argument (verified in
- * `node_modules/@vitest/browser-playwright/dist/index.js` lines
- * 867-872). All callers must funnel launch args through the
- * `makeBrowserConfig()` helper below.
+ * silently ignores that field. Launch options are read *only* from
+ * the `playwright({ launchOptions: { args: [...] } })` factory
+ * argument, which the provider spreads into the object it hands to
+ * Playwright's `.launch()`. All callers must funnel launch args
+ * through the `makeBrowserConfig()` helper below.
+ *
+ * Re-verified against `@vitest/browser-playwright@4.1.11` (issue
+ * #533): still no read of `instances[].launch`. This note
+ * deliberately cites the package version rather than line numbers in
+ * `node_modules` -- the previous wording pinned specific dist lines,
+ * which are gitignored, unversioned, and renumber on every patch
+ * release (they moved by ~14 lines between 4.1.7 and 4.1.11).
+ *
+ * The composition itself is enforced by
+ * `scripts/check-launch-args.mjs` in the `lint` chain, and proven at
+ * runtime by `ensureGc()` in `json-tree.component.perf.ts`, which
+ * throws if `--js-flags=--expose-gc` failed to reach Chromium.
+ *
+ * Dependabot keeps this family in lockstep via the `vitest` group in
+ * `.github/dependabot.yml`.
  */
 export const COMMON_LAUNCH_ARGS: readonly string[] = [
   '--no-sandbox',
@@ -73,6 +87,16 @@ export const sharedTestBase = {
 } as const;
 
 /**
+ * Fields `makeBrowserConfig` refuses to let a caller replace.
+ *
+ * `provider` carries the launch-args funnel; `instances` is where the
+ * PR #418 `launch` shape would re-enter. `enabled`/`headless` ride along
+ * because a browser block that is off or headed is not the harness the
+ * rest of this file describes.
+ */
+type ProtectedBrowserFields = 'enabled' | 'headless' | 'provider' | 'instances';
+
+/**
  * Build a `browser` config block for Vitest. Funneling all
  * provider creation through this helper guarantees launch args
  * actually reach Chromium (see `COMMON_LAUNCH_ARGS` comment).
@@ -81,14 +105,24 @@ export const sharedTestBase = {
  *   `COMMON_LAUNCH_ARGS`. The L2 perf bench adds
  *   `--js-flags=--expose-gc`; the unit suite passes `[]`.
  * @param overrides Optional extra browser-block fields (e.g.,
- *   `fileParallelism: false`, `onConsoleLog`). Merged shallow on
- *   top of the returned object.
+ *   `fileParallelism: false`, `onConsoleLog`). Spread *below* the
+ *   protected fields, so it can add but never replace them.
  */
 export function makeBrowserConfig(
   extraArgs: readonly string[] = [],
-  overrides: Partial<BrowserConfigOptions> = {},
+  overrides: Omit<Partial<BrowserConfigOptions>, ProtectedBrowserFields> = {},
 ): BrowserConfigOptions {
+  // `overrides` is spread FIRST so the protected fields below always win.
+  //
+  // It used to be spread last, which silently defeated the guarantee this
+  // helper exists to provide: a caller could pass a replacement `provider`
+  // (dropping COMMON_LAUNCH_ARGS) or an `instances` array carrying the
+  // ignored `launch` field, and `check-launch-args` -- which validates the
+  // literal written here -- would still pass. The `Omit` above makes that
+  // a compile error; the spread order makes it impossible at runtime even
+  // from untyped callers.
   return {
+    ...overrides,
     enabled: true,
     headless: true,
     provider: playwright({
@@ -97,6 +131,5 @@ export function makeBrowserConfig(
       },
     }),
     instances: [{ browser: 'chromium' }],
-    ...overrides,
   };
 }
