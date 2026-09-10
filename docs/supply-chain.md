@@ -334,6 +334,10 @@ which is the only mergeable delivery path for an Angular security fix.
 `filter_ignored_versions`), which is why the entry exists and why it is
 `update-types`-scoped rather than `versions:`-scoped.
 
+Confirmed in practice: within two minutes of #551 merging, Dependabot
+opened #552 bumping the `angular` group 21.2.22 -> 21.2.23. Before the
+ignore, that group could only ever have proposed 22.x.
+
 Two caveats recorded at the entry itself:
 
 - `ignore` has no `exclude-patterns`, so `'@angular/*'` also freezes
@@ -366,11 +370,30 @@ the version-path escape hatch is suppressed. #550 bounds this.
    ones. `npm run lint:lockfile` asserts you did.
 4. **Never** reach for `--legacy-peer-deps` or `--force` to make a
    partial bump install (AGENTS.md Section 2 and Section 7 #12).
-5. **Close the alarm PR** once the lockstep bump lands. Leaving it open
-   is not harmless: an open group PR causes Dependabot to skip that
-   group on subsequent runs (`find_existing_group_pr` ->
-   `mark_group_handled` -> `next`, matched by group *name*), so a stale
-   PR can silently starve the next advisory.
+5. **Close the alarm PR** once the lockstep bump lands -- but check
+   whether Dependabot has already done it. Two mechanisms are in play
+   and they pull in opposite directions:
+   - An open group PR causes Dependabot to *skip that group* on
+     subsequent runs (`find_existing_group_pr` ->
+     `mark_group_handled` -> `next`, matched by group **name**), so no
+     replacement PR is proposed while it sits there.
+   - A separate close-obsolete pass runs independently of that skip and
+     will close the PR on its own once the dependencies are "updatable
+     in another way."
+
+   Observed on 2026-09-10: #504 (the `angular` group targeting Angular
+   22) was closed by Dependabot itself ~3 minutes after an unrelated
+   `dependabot.yml` change merged, with the comment *"Looks like these
+   dependencies are updatable in another way, so this is no longer
+   needed."* #468 closed the same way when #551 merged. So the skip does
+   **not** trap a stale group PR open forever, as an earlier revision of
+   this runbook claimed.
+
+   Close it by hand only if it is still open after the next scheduled
+   run. The reason to care is the skip: while it is open, the group
+   proposes nothing, so a genuinely stuck PR does delay the next
+   advisory -- it just is not the permanent starvation the mechanism
+   alone suggests.
 
 ### Watch the `overrides` interaction
 
