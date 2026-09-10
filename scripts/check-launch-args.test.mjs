@@ -198,6 +198,51 @@ test('flags a helper that returns no object literal', () => {
   assert.match(violations[0], /does not return an object literal/);
 });
 
+// EVERY return path is the object Vitest might receive. Iterating only the
+// block's own statements missed a return nested in an `if`, and keeping the
+// last match let an early conditional return ship a bad provider.
+test('flags an early conditional return with a non-playwright provider', () => {
+  const body = ['if (fallback) return { provider: webdriverio({}) };', `  ${GOOD_RETURN}`].join(
+    '\n',
+  );
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /must be a `playwright/);
+  assert.match(violations[0], /return path 1 of 2/);
+});
+
+test('flags an early conditional return that drops COMMON_LAUNCH_ARGS', () => {
+  const body = [
+    'if (fallback) { return { provider: playwright({ launchOptions: { args: [...extraArgs] } }) }; }',
+    `  ${GOOD_RETURN}`,
+  ].join('\n');
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /does not spread COMMON_LAUNCH_ARGS/);
+  assert.match(violations[0], /return path 1 of 2/);
+});
+
+test('accepts a helper whose every return path is correct', () => {
+  const body = [`if (fallback) ${GOOD_RETURN}`, `  ${GOOD_RETURN}`].join('\n');
+  assert.deepEqual(lintSharedConfig(helper(body)), []);
+});
+
+test('flags a bare `return;` path', () => {
+  const body = ['if (skip) return;', `  ${GOOD_RETURN}`].join('\n');
+  const violations = lintSharedConfig(helper(body));
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /does not return an object literal/);
+});
+
+// A nested callback's `return` belongs to the callback, not the helper.
+test('ignores returns inside a nested function', () => {
+  const body = [
+    'const pick = () => { return { provider: webdriverio({}) }; };',
+    `  ${GOOD_RETURN}`,
+  ].join('\n');
+  assert.deepEqual(lintSharedConfig(helper(body)), []);
+});
+
 test('flags a returned object with no provider property', () => {
   const violations = lintSharedConfig(helper('return { headless: true };'));
   assert.equal(violations.length, 1);

@@ -223,33 +223,66 @@ function checkCommonArgs(sourceFile, path, violations) {
   }
 }
 
-/** Locates the object literal returned by `makeBrowserConfig`. */
-function findReturnedObject(sourceFile) {
+/**
+ * Collects EVERY return statement in a function, skipping nested
+ * functions (whose returns belong to them, not to this one).
+ *
+ * Iterating only the block's own statements missed a return nested in an
+ * `if`, and keeping the last match let an early conditional return with a
+ * bad provider pass. Every reachable return has to be validated, because
+ * any one of them can be the object Vitest receives.
+ */
+function collectReturns(fn) {
+  const returns = [];
+  const visit = (node) => {
+    if (
+      node !== fn &&
+      (ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isMethodDeclaration(node))
+    ) {
+      return; // a nested function's returns are its own
+    }
+    if (ts.isReturnStatement(node)) returns.push(node);
+    node.forEachChild(visit);
+  };
+  visit(fn);
+  return returns;
+}
+
+/** Unwraps a parenthesized expression. */
+function unwrap(expression) {
+  return expression && ts.isParenthesizedExpression(expression)
+    ? expression.expression
+    : expression;
+}
+
+/**
+ * Locates every object literal `makeBrowserConfig` can return.
+ *
+ * @returns `{ helper, returned: Node[], duplicates? }` where `returned`
+ *   holds one entry per return path; a non-object-literal path is `null`.
+ */
+function findReturnedObjects(sourceFile) {
   // Top-level only, and duplicates rejected -- same shadowing hazard as
   // COMMON_LAUNCH_ARGS: a nested `makeBrowserConfig` with the right shape
   // must not mask a bad exported one.
   const helpers = topLevelFunctions(sourceFile, HELPER);
-  if (helpers.length > 1) return { helper: null, returned: null, duplicates: helpers.length };
+  if (helpers.length > 1) return { helper: null, returned: [], duplicates: helpers.length };
   const helper = helpers[0] ?? null;
-  if (!helper) return { helper: null, returned: null };
+  if (!helper) return { helper: null, returned: [] };
 
   // Arrow shorthand: `(args) => ({ ... })`
   if (ts.isArrowFunction(helper) && helper.body && !ts.isBlock(helper.body)) {
-    const body = ts.isParenthesizedExpression(helper.body) ? helper.body.expression : helper.body;
-    return { helper, returned: ts.isObjectLiteralExpression(body) ? body : null };
+    const body = unwrap(helper.body);
+    return { helper, returned: [ts.isObjectLiteralExpression(body) ? body : null] };
   }
 
-  let returned = null;
-  const body = helper.body;
-  if (body && ts.isBlock(body)) {
-    for (const statement of body.statements) {
-      if (!ts.isReturnStatement(statement) || !statement.expression) continue;
-      const expression = ts.isParenthesizedExpression(statement.expression)
-        ? statement.expression.expression
-        : statement.expression;
-      if (ts.isObjectLiteralExpression(expression)) returned = expression;
-    }
-  }
+  const returned = collectReturns(helper).map((statement) => {
+    const expression = unwrap(statement.expression);
+    return expression && ts.isObjectLiteralExpression(expression) ? expression : null;
+  });
   return { helper, returned };
 }
 
@@ -262,7 +295,7 @@ function findReturnedObject(sourceFile) {
  * somewhere other than the property Vitest actually consumes.
  */
 function checkProvider(sourceFile, path, violations) {
-  const { helper, returned, duplicates } = findReturnedObject(sourceFile);
+  const { helper, returned, duplicates } = findReturnedObjects(sourceFile);
   if (duplicates) {
     violations.push(
       `${path}: found ${duplicates} top-level \`${HELPER}(...)\` declarations. ` +
@@ -277,10 +310,30 @@ function checkProvider(sourceFile, path, violations) {
     );
     return;
   }
+  if (returned.length === 0) {
+    violations.push(
+      `${path}: \`${HELPER}(...)\` has no return statement, so the provider it hands to ` +
+        `Vitest cannot be verified.`,
+    );
+    return;
+  }
+
+  // EVERY return path is checked. Any one of them can be the object Vitest
+  // receives, so validating only the last let an early conditional return
+  // ship a provider that drops the launch args.
+  const many = returned.length > 1;
+  returned.forEach((object, index) => {
+    const where = many ? ` (return path ${index + 1} of ${returned.length})` : '';
+    checkReturnedObject(object, path, where, violations);
+  });
+}
+
+/** Validates one returned object literal's `provider` property. */
+function checkReturnedObject(returned, path, where, violations) {
   if (!returned) {
     violations.push(
-      `${path}: \`${HELPER}(...)\` does not return an object literal, so the provider it ` +
-        `hands to Vitest cannot be verified.`,
+      `${path}: \`${HELPER}(...)\` does not return an object literal${where}, so the provider ` +
+        `it hands to Vitest cannot be verified.`,
     );
     return;
   }
@@ -288,7 +341,7 @@ function checkProvider(sourceFile, path, violations) {
   const providerProp = findProperty(returned, 'provider');
   if (!providerProp || !ts.isPropertyAssignment(providerProp)) {
     violations.push(
-      `${path}: the object returned by \`${HELPER}(...)\` has no top-level \`provider\` property.`,
+      `${path}: the object returned by \`${HELPER}(...)\` has no top-level \`provider\` property${where}.`,
     );
     return;
   }
@@ -300,7 +353,7 @@ function checkProvider(sourceFile, path, violations) {
     call.expression.text !== 'playwright'
   ) {
     violations.push(
-      `${path}: the returned \`provider\` must be a \`playwright({ ... })\` call, but is ` +
+      `${path}: the returned \`provider\`${where} must be a \`playwright({ ... })\` call, but is ` +
         `\`${call.getText().split('\n')[0]}\`. @vitest/browser-playwright reads launch options ` +
         `ONLY from that factory argument (re-verified against 4.1.11).`,
     );
@@ -314,13 +367,13 @@ function checkProvider(sourceFile, path, violations) {
       : null;
   if (!argsProp || !ts.isPropertyAssignment(argsProp)) {
     violations.push(
-      `${path}: the returned \`provider: playwright(...)\` call has no ` +
+      `${path}: the returned \`provider: playwright(...)\` call${where} has no ` +
         `\`launchOptions.args\`, so no launch flags reach Chromium.`,
     );
     return;
   }
   if (!ts.isArrayLiteralExpression(argsProp.initializer)) {
-    violations.push(`${path}: \`launchOptions.args\` must be an array literal.`);
+    violations.push(`${path}: \`launchOptions.args\`${where} must be an array literal.`);
     return;
   }
 
@@ -360,7 +413,7 @@ function checkProvider(sourceFile, path, violations) {
         `first and ${EXTRA_ARGS_PARAM} second -- otherwise a harness cannot override a baseline flag.`;
     }
     violations.push(
-      `${path}: the returned provider's \`launchOptions.args\` must be exactly ` +
+      `${path}: the returned provider's \`launchOptions.args\`${where} must be exactly ` +
         `\`[...${ARGS_CONST}, ...${EXTRA_ARGS_PARAM}]\`, but ${why} Found \`[${found}]\`.`,
     );
   }
