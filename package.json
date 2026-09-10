@@ -112,7 +112,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "axe-core": "^4.11.4",
     "husky": "^9.1.7",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^4.3.2",
     "knip": "~6.14.2",
     "lint-staged": "^17.0.5",
     "playwright": "^1.60.0",
@@ -126,7 +126,7 @@
   },
   "overrides": {
     "@babel/plugin-transform-modules-systemjs": "^7.29.4",
-    "fast-uri": "^3.1.2",
+    "fast-uri": "^3.1.7",
     "hono": "^4.12.16"
   }
 }
