@@ -47,6 +47,84 @@ test('parseConfig rejects a non-object document', () => {
   assert.match(error, /did not parse to an object/);
 });
 
+test('parseConfig rejects a top-level sequence document', () => {
+  const { error } = parseConfig('- one\n- two\n');
+  assert.match(error, /did not parse to an object/);
+});
+
+// Structural validation of each `updates[i]`. Without it, `updates: [null]`
+// throws in ecosystemKey and `groups: 'nope'` makes Object.entries enumerate
+// the string's character indices, reporting a group named '0'. A gate whose
+// failure output misleads is worse than one that fails loudly.
+for (const [label, yamlText, expected] of [
+  [
+    'a string entry',
+    "version: 2\nupdates: ['oops']\n",
+    /`updates\[0\]` is a string, not a mapping/,
+  ],
+  ['a null entry', 'version: 2\nupdates: [null]\n', /`updates\[0\]` is null, not a mapping/],
+  ['a number entry', 'version: 2\nupdates: [42]\n', /`updates\[0\]` is a number, not a mapping/],
+  [
+    'a nested sequence',
+    'version: 2\nupdates: [[1, 2]]\n',
+    /`updates\[0\]` is a sequence, not a mapping/,
+  ],
+]) {
+  test(`parseConfig rejects ${label} without throwing`, () => {
+    const { updates, error } = parseConfig(yamlText);
+    assert.deepEqual(updates, []);
+    assert.match(error, expected);
+  });
+
+  test(`checkDependabotConfig surfaces ${label} as one clear problem`, () => {
+    // assert.doesNotThrow is the point of the test: the pre-fix code raised
+    // `TypeError: Cannot read properties of null` for the null case.
+    let problems;
+    assert.doesNotThrow(() => {
+      problems = checkDependabotConfig(yamlText);
+    });
+    assert.equal(
+      problems.length,
+      1,
+      `expected a single structural error, got:\n${problems?.join('\n')}`,
+    );
+    assert.match(problems[0], expected);
+  });
+}
+
+test('parseConfig rejects a non-mapping groups value', () => {
+  const { error } = parseConfig(
+    "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    groups: 'nope'\n",
+  );
+  assert.match(error, /`updates\[0\]\.groups` is a string, not a mapping/);
+});
+
+test('parseConfig rejects a non-sequence ignore value', () => {
+  const { error } = parseConfig(
+    "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    ignore: 'nope'\n",
+  );
+  assert.match(error, /`updates\[0\]\.ignore` is a string, not a sequence/);
+});
+
+test('parseConfig rejects an entry with no package-ecosystem', () => {
+  const { error } = parseConfig('version: 2\nupdates:\n  - directory: /\n');
+  assert.match(error, /`updates\[0\]\.package-ecosystem` is missing or not a string/);
+});
+
+test('parseConfig reports every structural problem, not just the first', () => {
+  const { error } = parseConfig('version: 2\nupdates:\n  - null\n  - 42\n');
+  assert.match(error, /`updates\[0\]` is null/);
+  assert.match(error, /`updates\[1\]` is a number/);
+});
+
+test('parseConfig accepts entries that omit the optional groups and ignore keys', () => {
+  const { updates, error } = parseConfig(
+    'version: 2\nupdates:\n  - package-ecosystem: github-actions\n    directory: /\n',
+  );
+  assert.equal(error, null);
+  assert.equal(updates.length, 1);
+});
+
 test('ecosystemKey defaults a missing directory to /', () => {
   assert.equal(ecosystemKey({ 'package-ecosystem': 'github-actions' }), 'github-actions:/');
   assert.equal(ecosystemKey(update({ directory: '/api' })), 'npm:/api');

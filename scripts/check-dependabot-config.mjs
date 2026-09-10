@@ -335,6 +335,14 @@ export function isPatternExcluded(pattern, excludes) {
 /**
  * Parses the config. Returns `{ updates, error }` -- `error` is a string when
  * the file is missing or structurally unusable, in which case `updates` is [].
+ *
+ * Structural validation is deliberately strict about the shapes every check
+ * below indexes into (`updates[i]`, `.groups`, `.ignore`). A malformed entry
+ * must fail as one clear structural error rather than a stack trace or a
+ * cascade of nonsense findings: `updates: [null]` would otherwise throw in
+ * `ecosystemKey`, and `groups: 'nope'` would have `Object.entries` enumerate
+ * the string's character indices and report a group named '0'. A gate whose
+ * failure output is misleading is worse than one that fails loudly.
  */
 export function parseConfig(text) {
   let parsed;
@@ -344,13 +352,54 @@ export function parseConfig(text) {
     const message = error instanceof Error ? error.message : String(error);
     return { updates: [], error: `failed to parse ${DEPENDABOT_CONFIG} as YAML: ${message}` };
   }
-  if (parsed === null || typeof parsed !== 'object') {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { updates: [], error: `${DEPENDABOT_CONFIG} did not parse to an object.` };
   }
   if (!Array.isArray(parsed.updates)) {
     return { updates: [], error: `${DEPENDABOT_CONFIG} has no top-level \`updates\` array.` };
   }
+
+  const structural = [];
+  parsed.updates.forEach((update, index) => {
+    if (update === null || typeof update !== 'object' || Array.isArray(update)) {
+      structural.push(
+        `${DEPENDABOT_CONFIG}: \`updates[${index}]\` is ${describeType(update)}, not a mapping.`,
+      );
+      return;
+    }
+    if (typeof update['package-ecosystem'] !== 'string') {
+      structural.push(
+        `${DEPENDABOT_CONFIG}: \`updates[${index}].package-ecosystem\` is missing or not a string.`,
+      );
+    }
+    const groups = update.groups;
+    if (
+      groups !== undefined &&
+      (groups === null || typeof groups !== 'object' || Array.isArray(groups))
+    ) {
+      structural.push(
+        `${DEPENDABOT_CONFIG}: \`updates[${index}].groups\` is ${describeType(groups)}, not a mapping.`,
+      );
+    }
+    if (update.ignore !== undefined && !Array.isArray(update.ignore)) {
+      structural.push(
+        `${DEPENDABOT_CONFIG}: \`updates[${index}].ignore\` is ${describeType(update.ignore)}, not a sequence.`,
+      );
+    }
+  });
+
+  if (structural.length > 0) {
+    return { updates: [], error: structural.join('\n    ') };
+  }
+
   return { updates: parsed.updates, error: null };
+}
+
+/** Human-readable type label for a structural error message. */
+function describeType(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'a sequence';
+  return `a ${typeof value}`;
 }
 
 /** A: every group declares an explicit `applies-to`, with a valid value. */
