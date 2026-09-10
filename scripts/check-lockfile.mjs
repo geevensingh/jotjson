@@ -66,6 +66,17 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/**
+ * The only tarball host a committed lockfile may name.
+ *
+ * Corporate npm proxies (Azure DevOps feeds, Artifactory, Verdaccio) rewrite
+ * `resolved` to their own URL when they serve a package. That is fine for a
+ * local install and poison in a committed lockfile: contributors and CI
+ * outside that network cannot resolve it, and the host name itself may be
+ * internal. See `checkMetadataFields` for the full failure story (PR #534).
+ */
+const PUBLIC_REGISTRY_HOST = 'registry.npmjs.org';
+
 const WORKSPACES = [
   { name: 'root', prefix: null, lockfile: 'package-lock.json', manifest: 'package.json' },
   {
@@ -115,26 +126,56 @@ function findNpmCli() {
  *                        immutable 40-hex commit SHA; a mutable ref such
  *                        as `#main` is exactly as unverifiable as a
  *                        missing hash, so it fails.
- *   - everything else -> registry, remote tarball, or local tarball. Must
- *                        carry both `resolved` and a non-empty `integrity`.
+ *   - `file:` sources -> a local path; there is no host to check.
+ *   - everything else -> must be a public-registry tarball. Must carry
+ *                        both `resolved` and a non-empty `integrity`, and
+ *                        must satisfy the provenance rules below.
+ *
+ * Provenance (PR #534). Presence is not enough: a `resolved` URL must name
+ * `registry.npmjs.org` over https, with no userinfo, query string, or
+ * fragment, and `integrity` must be sha512.
+ *
+ * This deliberately forbids **remote tarballs from any other host**, even
+ * with valid integrity. An arbitrary HTTPS tarball is a dependency that
+ * Dependabot cannot version-update or security-patch and that `npm audit`
+ * cannot see -- a package nobody is watching, which is the exact failure
+ * class behind issues #514 and #533. The repo has none today (1248/1248
+ * root entries are public-registry), so this codifies the existing state.
+ * If one is ever genuinely required, relax this gate deliberately and
+ * record the justification, the same way root `overrides` are classified
+ * in `scripts/check-dependency-overrides.mjs`.
  *
  * Presence, not grammar: we deliberately do not validate the SRI string
- * beyond non-emptiness. Hash *correctness* is `npm ci`'s job -- it verifies
- * each tarball on download. Re-implementing npm's accepted integrity
- * grammar here would risk false positives for no added signal.
+ * beyond its algorithm prefix. Hash *correctness* is `npm ci`'s job -- it
+ * verifies each tarball on download. Re-implementing npm's accepted
+ * integrity grammar here would risk false positives for no added signal.
+ *
+ * Offenders carry a `kind`: `missing` (issue #509 -- fix by regenerating)
+ * or `provenance` (PR #534 -- fix in place; regenerating would float
+ * unrelated versions). `printMetadataMessage` reports them separately
+ * because the remediations are opposites.
  *
  * Exported for unit-testing under `scripts/check-lockfile.test.mjs`.
  *
  * @param {unknown} lock - parsed package-lock.json contents
- * @returns {{ path: string, reason: string }[]} offenders, sorted by path
+ * @returns {{ path: string, kind: 'missing' | 'provenance', reason: string }[]}
+ *   offenders, sorted by path
  */
 export function checkMetadataFields(lock) {
   if (typeof lock !== 'object' || lock === null) {
-    return [{ path: '<file>', reason: 'package-lock.json did not parse to an object' }];
+    return [
+      { path: '<file>', kind: 'missing', reason: 'package-lock.json did not parse to an object' },
+    ];
   }
   const packages = /** @type {Record<string, unknown>} */ (lock).packages;
   if (typeof packages !== 'object' || packages === null) {
-    return [{ path: '<file>', reason: 'package-lock.json is missing the `packages` map' }];
+    return [
+      {
+        path: '<file>',
+        kind: 'missing',
+        reason: 'package-lock.json is missing the `packages` map',
+      },
+    ];
   }
 
   const nonEmptyString = (value) => typeof value === 'string' && value.length > 0;
@@ -146,7 +187,7 @@ export function checkMetadataFields(lock) {
 
     const entry = /** @type {Record<string, unknown>} */ (packages)[path];
     if (typeof entry !== 'object' || entry === null) {
-      offenders.push({ path, reason: 'entry is not an object' });
+      offenders.push({ path, kind: 'missing', reason: 'entry is not an object' });
       continue;
     }
     const record = /** @type {Record<string, unknown>} */ (entry);
@@ -160,6 +201,7 @@ export function checkMetadataFields(lock) {
       // half the problem and re-run into the other half.
       offenders.push({
         path,
+        kind: 'missing',
         reason: hasIntegrity ? 'missing `resolved`' : 'missing `resolved` and `integrity`',
       });
       continue;
@@ -171,14 +213,135 @@ export function checkMetadataFields(lock) {
       if (!/#[0-9a-f]{40}$/.test(resolved)) {
         offenders.push({
           path,
+          kind: 'missing',
           reason: 'git source is not pinned to a 40-hex commit SHA',
         });
       }
       continue;
     }
 
+    // `file:` sources: a local path, so there is no tarball to hash and no
+    // host to check. This exemption must come BEFORE the integrity
+    // requirement below -- npm records no `integrity` for a local path, so
+    // checking integrity first reported every real `file:` dependency as
+    // missing metadata. (The earlier revision had the exemption only in the
+    // provenance block further down, and its test used a synthetic `file:`
+    // entry that carried a sha512, which no real one does.)
+    if (/^file:/.test(resolved)) continue;
+
     if (!hasIntegrity) {
-      offenders.push({ path, reason: 'missing `integrity`' });
+      offenders.push({ path, kind: 'missing', reason: 'missing `integrity`' });
+      continue;
+    }
+
+    // Registry provenance. `npm ci` happily installs whatever host the
+    // lockfile names, so a private-mirror URL is silently non-reproducible
+    // for anyone who cannot reach that host -- and it can leak internal
+    // infrastructure names into a public repo.
+    //
+    // This is the sibling of the issue #509 shape above: that gate catches
+    // metadata that is *missing*, this one catches metadata that is
+    // *wrong*. Both are invariants `npm ci` does not enforce. They are
+    // tagged with different `kind`s because they need opposite fixes --
+    // see `printMetadataMessage`.
+    //
+    // How it happens (observed on PR #534): a contributor or agent whose
+    // `npm config get registry` points at a corporate proxy re-resolves
+    // part of the tree. npm rewrites `resolved` to the proxy's tarball URL
+    // and records whatever digest the proxy advertises -- for an Azure
+    // DevOps feed that is the legacy `shasum`, so `integrity` silently
+    // degrades from sha512 to sha1. CI still passed, because the proxy was
+    // publicly reachable; the damage was reproducibility, provenance, and
+    // digest strength, none of which any existing gate checked.
+    // Every remaining entry is a registry tarball: `link`, `inBundle`, git,
+    // and `file:` have all been handled above.
+    let url = null;
+    try {
+      url = new URL(resolved);
+    } catch {
+      // Deliberately does NOT echo `resolved`. A malformed value can
+      // still contain a token, and this reason string lands in public CI
+      // logs. `path` already tells the reader which entry to open.
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason: '`resolved` is not a parsable URL',
+      });
+      continue;
+    }
+    if (url.host !== PUBLIC_REGISTRY_HOST) {
+      // The host is NOT echoed. A mirror or malformed URL can carry a
+      // secret in the hostname itself (`https://<token>.example/...`),
+      // and this reason lands in public CI logs -- the same guarantee the
+      // parse-failure, userinfo, and query branches already make. `path`
+      // identifies the entry; the reader opens the lockfile to see it.
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason:
+          `\`resolved\` does not point at '${PUBLIC_REGISTRY_HOST}'. ` +
+          `If this came from a corporate mirror, re-resolve with ` +
+          `\`--registry=https://${PUBLIC_REGISTRY_HOST}/\`. Remote tarballs from ` +
+          `other hosts are not allowed: Dependabot and npm audit cannot see them.`,
+      });
+      continue;
+    }
+    // Host alone is not provenance. `http://` downgrades the fetch to
+    // cleartext, and embedded credentials would be committed in plain
+    // text to a public repo -- both while naming the right host.
+    if (url.protocol !== 'https:') {
+      // The scheme is not echoed either: `SUPERSECRET://registry.npmjs.org/...`
+      // parses successfully and would otherwise print a secret-bearing
+      // protocol into public CI logs.
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason: '`resolved` does not use the https:// scheme',
+      });
+      continue;
+    }
+    if (url.username !== '' || url.password !== '') {
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason: '`resolved` embeds credentials in the URL; strip the userinfo component',
+      });
+      continue;
+    }
+    // A query string or fragment is the other place a token can hide
+    // (`...x-1.0.0.tgz?token=...`), and it clears the host, scheme, and
+    // userinfo checks above. Registry tarball URLs are plain paths, so
+    // anything here is unexpected. The value is not echoed, for the same
+    // reason as the parse-failure branch.
+    if (url.search !== '' || url.hash !== '') {
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason:
+          '`resolved` carries a query string or fragment; registry tarball URLs are ' +
+          'plain paths, and these can smuggle a credential',
+      });
+      continue;
+    }
+
+    // Digest strength. npm accepts sha1 for backwards compatibility, but
+    // every entry the public registry serves today carries sha512, so a
+    // sha1 entry means the metadata came from somewhere else.
+    const integrity = String(record['integrity']);
+    if (!integrity.startsWith('sha512-')) {
+      // Only an allowlisted algorithm label is echoed. `integrity` is
+      // attacker-influenced free text -- a dashless value like a raw token
+      // would otherwise be copied verbatim into public CI logs by
+      // `split('-')[0]`, defeating the no-secret guarantee the sibling
+      // branches make.
+      const algorithm = /^(sha1|sha256|sha384|sha512)-/.exec(integrity)?.[1];
+      offenders.push({
+        path,
+        kind: 'provenance',
+        reason: algorithm
+          ? `\`integrity\` uses '${algorithm}', expected 'sha512'`
+          : "`integrity` is malformed (no recognized algorithm prefix), expected 'sha512'",
+      });
     }
   }
 
@@ -187,7 +350,6 @@ export function checkMetadataFields(lock) {
 
 /** Number of offending entries listed before truncating the report. */
 const MAX_REPORTED_OFFENDERS = 10;
-
 /**
  * Prints the safe lockfile-regeneration recipe for a workspace.
  *
@@ -211,23 +373,312 @@ function printRegenerationSteps(workspace) {
   console.error(`    git add ${workspace.lockfile}`);
 }
 
-function printMetadataMessage(workspace, offenders) {
+/**
+ * Reports metadata offenders, split by `kind`.
+ *
+ * Exported for unit-testing: the two branches carry OPPOSITE remediations
+ * (regenerate vs. repair in place), and printing the regeneration recipe
+ * for a provenance failure would actively cause the version-floating harm
+ * AGENTS.md Section 7 #13 warns about. Asserting the offender `kind` alone
+ * does not catch that -- only reading the emitted text does.
+ */
+export function printMetadataMessage(workspace, offenders) {
+  // Two failure shapes with OPPOSITE fixes share this reporter, so they are
+  // reported separately. Missing metadata (issue #509) is repaired by
+  // regenerating the lockfile from scratch. Invalid provenance or a weak
+  // digest (PR #534) must NOT be -- the metadata is present, so a full
+  // regeneration would re-resolve every range and float versions, turning
+  // a metadata fix into an unreviewed dependency bump (AGENTS.md Section 7
+  // #13). Printing the regeneration recipe for those would actively cause
+  // the harm the supply-chain doc warns about.
+  const missing = offenders.filter((offender) => offender.kind !== 'provenance');
+  const provenance = offenders.filter((offender) => offender.kind === 'provenance');
+
+  const listOffenders = (list) => {
+    const shown = list.slice(0, MAX_REPORTED_OFFENDERS);
+    for (const offender of shown) {
+      console.error(`    ${offender.path} - ${offender.reason}`);
+    }
+    if (list.length > shown.length) {
+      console.error(`    ... showing first ${shown.length} of ${list.length}`);
+    }
+  };
+
+  if (missing.length > 0) {
+    console.error('');
+    console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (missing metadata)`);
+    console.error(
+      `  ${missing.length} entr${missing.length === 1 ? 'y' : 'ies'} lack${missing.length === 1 ? 's' : ''} the \`resolved\`/\`integrity\` that pin what npm downloads.`,
+    );
+    listOffenders(missing);
+    console.error('  Common cause: regenerating the lockfile while `node_modules` was present,');
+    console.error('  which makes npm rebuild entries from the on-disk tree (no metadata there).');
+    console.error('  Fix (order matters - `node_modules` MUST be absent), from the repo root:');
+    printRegenerationSteps(workspace);
+  }
+
+  if (provenance.length > 0) {
+    console.error('');
+    console.error(
+      `check-lockfile: FAILED for workspace '${workspace.name}' (invalid provenance/digest)`,
+    );
+    console.error(
+      `  ${provenance.length} entr${provenance.length === 1 ? 'y' : 'ies'} ${provenance.length === 1 ? 'has' : 'have'} metadata, but it does not name the public registry over https with a sha512 digest.`,
+    );
+    listOffenders(provenance);
+    console.error('  Common cause: your npm registry points at a corporate proxy, so');
+    console.error('  re-resolving rewrote `resolved` to the proxy host and recorded the');
+    console.error('  legacy sha1 `shasum` it advertises instead of `dist.integrity`.');
+    console.error('  Fix: repair these entries IN PLACE - do NOT regenerate the lockfile,');
+    console.error('  which would re-resolve every range and float unrelated versions.');
+    console.error('  For each entry, take the canonical values from the public registry:');
+    console.error(
+      `    npm view <name>@<version> dist.tarball dist.integrity --registry=https://${PUBLIC_REGISTRY_HOST}/ --json`,
+    );
+    console.error('  then write them back as `resolved` and `integrity`. Afterwards confirm');
+    console.error("  no entry's `version` changed. See docs/supply-chain.md ->");
+    console.error('  "Registry provenance in the lockfile".');
+  }
+}
+
+/**
+ * Peer-locked families: sets of packages whose members peer-depend on
+ * each other at an EXACT version, so a partial bump cannot resolve.
+ *
+ * `.github/dependabot.yml` groups each family so Dependabot proposes
+ * them together, but a group only constrains Dependabot's
+ * version-update output. It cannot constrain a security-update PR, a
+ * human, or an agent session. This gate is the detection half: it runs
+ * in Phase 1 (pure JSON parse, before `npm ci`) and fails loudly on a
+ * partial bump from ANY inbound path.
+ *
+ * `declared` are the root devDependencies whose ranges must match.
+ * `followers` are transitive packages pinned exactly by a declared member
+ * **at the family's own version** -- they are not in `package.json` at all,
+ * which is exactly why they need asserting: `@vitest/browser` carried two
+ * critical advisories (issue #533) while being invisible on the manifest.
+ *
+ * The "at the family's own version" qualifier is load-bearing. Some
+ * transitives are exact-pinned but on a *different* numbering: the Angular
+ * devkit pins `@angular-devkit/architect` and `@angular-devkit/build-webpack`
+ * at `0.2102.22` while the family itself is at `21.2.22`. That is the
+ * long-standing Angular `0.MMmm.pp` scheme, not drift. This gate asserts
+ * one shared version per family, so those two are deliberately out of
+ * scope rather than silently missed; asserting them would need a
+ * version-mapping mechanism nothing else here requires, and the family
+ * already moves as a single Dependabot group. `@angular-devkit/core` and
+ * `@angular/build` *are* pinned at `21.2.22`, so they are listed.
+ *
+ * See docs/supply-chain.md -> "Peer-locked dependency families".
+ */
+export const PEER_LOCKED_FAMILIES = [
+  {
+    name: 'vitest',
+    workspace: 'root',
+    declared: ['vitest', '@vitest/browser-playwright', '@vitest/coverage-v8'],
+    // Exact-pinned transitives. None of these appear in package.json, which
+    // is precisely why they need asserting: @vitest/browser carried two
+    // critical advisories (#533) while invisible on the manifest. `vitest`
+    // itself pins the rest of this list at its own exact version, so any
+    // one of them going stale is the same class of drift.
+    followers: [
+      '@vitest/browser',
+      '@vitest/expect',
+      '@vitest/mocker',
+      '@vitest/pretty-format',
+      '@vitest/runner',
+      '@vitest/snapshot',
+      '@vitest/spy',
+      '@vitest/utils',
+    ],
+    issue: '#533',
+  },
+  // The Angular runtime + devkit peer-lock at an exact version:
+  // @angular/core peers @angular/compiler exactly, @angular/compiler-cli
+  // peers @angular/compiler exactly, @angular/router peers common /core /
+  // platform-browser exactly, and so on. `.github/dependabot.yml` has
+  // grouped them since before this gate existed; this is the matching
+  // detection half.
+  //
+  // The `declared` list below is the root-declared half of the family.
+  // The `followers` list is the transitive half -- packages pinned at the
+  // family version by a declared member but absent from package.json
+  // (see the follower list for which parent pins each). Both halves are
+  // asserted; an earlier revision of this comment claimed the family had
+  // no followers, which was wrong and made the transitive coverage look
+  // accidental.
+  {
+    name: 'angular',
+    workspace: 'root',
+    declared: [
+      '@angular/animations',
+      '@angular/common',
+      '@angular/compiler',
+      '@angular/compiler-cli',
+      '@angular/core',
+      '@angular/forms',
+      '@angular/localize',
+      '@angular/platform-browser',
+      '@angular/platform-server',
+      '@angular/router',
+      '@angular/ssr',
+      '@angular/cli',
+      '@angular-devkit/build-angular',
+    ],
+    // Pinned at the family version and absent from package.json:
+    // build-angular pins core + @angular/build; @angular/cli pins
+    // @angular-devkit/schematics and @schematics/angular, and
+    // @schematics/angular pins core + schematics in turn. The
+    // `0.2102.22`-mapped devkit packages are excluded by design -- see the
+    // version-mapping note above.
+    followers: [
+      '@angular-devkit/core',
+      '@angular-devkit/schematics',
+      '@angular/build',
+      '@schematics/angular',
+    ],
+  },
+  // Material and CDK peer-lock to each other exactly but ship on their own
+  // release cadence, which is why dependabot.yml carves them out of the
+  // `angular` group. Same split here so a Material bump is not reported as
+  // Angular-runtime drift.
+  {
+    name: 'material',
+    workspace: 'root',
+    declared: ['@angular/material', '@angular/cdk'],
+    followers: [],
+  },
+  // Playwright is exact-linked rather than peer-locked: @playwright/test
+  // depends on `playwright` at an exact version, which depends on
+  // `playwright-core` at an exact version. The lockstep requirement is the
+  // same, so it belongs here.
+  //
+  // It matters beyond tidiness. `.github/actions/install-playwright-chromium`
+  // derives the CI cache key from the resolved root `playwright` version and
+  // is used by BOTH the e2e job and the Vitest browser-mode unit tests, so
+  // this family determines the exact Chromium binary the suite runs against.
+  // Issue #533 deliberately held it at 1.60.0 to keep the browser out of the
+  // runner upgrade as a confounding variable; #537 tracks moving it, and the
+  // whole family must move together.
+  {
+    name: 'playwright',
+    workspace: 'root',
+    declared: ['playwright', '@playwright/test'],
+    followers: ['playwright-core'],
+    issue: '#537',
+  },
+];
+
+/**
+ * Renders a family's tracking-issue reference, or nothing when it has none.
+ *
+ * `issue` is optional on purpose: the Angular and Material families are
+ * long-standing and have no single tracking issue, and stamping them with
+ * the Vitest remediation issue would point a maintainer at unrelated
+ * history. `printPeerLockedFamilyMessage` always prints the
+ * docs/supply-chain.md pointer, so a family without an issue still has
+ * somewhere to go.
+ */
+function issueSuffix(family) {
+  return family.issue ? ` (${family.issue})` : '';
+}
+
+/**
+ * Verifies every peer-locked family in `pkg`/`lock` moves in lockstep.
+ * Returns an array of human-readable problem strings; empty means OK.
+ */
+export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
+  const problems = [];
+  const packages = lock?.packages;
+  if (typeof packages !== 'object' || packages === null) return problems;
+
+  for (const family of PEER_LOCKED_FAMILIES) {
+    if (family.workspace !== workspaceName) continue;
+
+    // A family that is not used here at all is not drift -- skip it. A
+    // family that is only PARTIALLY declared still falls through to the
+    // per-member check below, because dropping one member of an
+    // exact-peer-locked set is exactly the failure this gate exists for.
+    const declaredHere = family.declared.filter(
+      (name) => typeof (pkg?.devDependencies?.[name] ?? pkg?.dependencies?.[name]) === 'string',
+    );
+    if (declaredHere.length === 0) continue;
+
+    // 1. Declared ranges must be identical across the family.
+    const ranges = new Map();
+    for (const name of family.declared) {
+      const range = pkg?.devDependencies?.[name] ?? pkg?.dependencies?.[name];
+      if (typeof range !== 'string') {
+        problems.push(
+          `${family.name} family: '${name}' is not declared in package.json. ` +
+            `All of [${family.declared.join(', ')}] must be declared together.`,
+        );
+        continue;
+      }
+      ranges.set(name, range);
+    }
+    const distinctRanges = new Set(ranges.values());
+    if (distinctRanges.size > 1) {
+      const detail = [...ranges].map(([n, r]) => `${n}=${r}`).join(', ');
+      problems.push(
+        `${family.name} family: declared ranges diverge (${detail}). ` +
+          `These packages peer-depend on each other at an exact version, so a ` +
+          `partial bump cannot resolve -- npm will ERESOLVE on install.${issueSuffix(family)}`,
+      );
+    }
+
+    // 2. Resolved versions must be identical, across declared AND followers,
+    //    and each must appear exactly once (a nested duplicate means one copy
+    //    is unwatched -- the shape that hides an open advisory).
+    const resolved = new Map();
+    for (const name of [...family.declared, ...family.followers]) {
+      const suffix = `node_modules/${name}`;
+      const entries = Object.keys(packages).filter(
+        (key) => key === suffix || key.endsWith(`/${suffix}`),
+      );
+      if (entries.length === 0) {
+        problems.push(`${family.name} family: '${name}' has no entry in the lockfile.`);
+        continue;
+      }
+      // npm legitimately nests a duplicate copy when peer contexts differ.
+      // What matters for an exact-peer-locked family is that every copy is
+      // the SAME version: identical copies cannot carry a stale advisory,
+      // which is the whole reason this check exists. Only divergent copies
+      // are a problem, so compare versions rather than counting entries.
+      const versions = [...new Set(entries.map((key) => packages[key]?.version))];
+      if (versions.length > 1) {
+        const detail = entries.map((key) => `${key}@${packages[key]?.version}`).join(', ');
+        problems.push(
+          `${family.name} family: '${name}' resolves to ${entries.length} copies at ` +
+            `differing versions (${detail}). Every copy must be the same version -- ` +
+            `otherwise one is an unwatched duplicate that can silently carry an ` +
+            `advisory.${issueSuffix(family)}`,
+        );
+        continue;
+      }
+      resolved.set(name, versions[0]);
+    }
+    const distinctResolved = new Set(resolved.values());
+    if (distinctResolved.size > 1) {
+      const detail = [...resolved].map(([n, v]) => `${n}@${v}`).join(', ');
+      problems.push(
+        `${family.name} family: resolved versions diverge (${detail}). ` +
+          `Every member -- including transitives not named in package.json -- ` +
+          `must be at the same version.${issueSuffix(family)}`,
+      );
+    }
+  }
+  return problems;
+}
+
+function printPeerLockedFamilyMessage(workspace, problems) {
   console.error('');
-  console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (missing metadata)`);
-  console.error(
-    `  ${offenders.length} entr${offenders.length === 1 ? 'y' : 'ies'} lack${offenders.length === 1 ? 's' : ''} the \`resolved\`/\`integrity\` that pin what npm downloads.`,
-  );
-  const shown = offenders.slice(0, MAX_REPORTED_OFFENDERS);
-  for (const offender of shown) {
-    console.error(`    ${offender.path} - ${offender.reason}`);
+  console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (peer-locked family)`);
+  for (const problem of problems) {
+    console.error(`  ${problem}`);
   }
-  if (offenders.length > shown.length) {
-    console.error(`    ... showing first ${shown.length} of ${offenders.length}`);
-  }
-  console.error('  Common cause: regenerating the lockfile while `node_modules` was present,');
-  console.error('  which makes npm rebuild entries from the on-disk tree (no metadata there).');
-  console.error('  Fix (order matters - `node_modules` MUST be absent), from the repo root:');
-  printRegenerationSteps(workspace);
+  console.error('  Fix: bump every member of the family to the same version in one change.');
+  console.error('    See docs/supply-chain.md -> "Peer-locked dependency families".');
 }
 
 /**
@@ -396,7 +847,8 @@ export function main(argv = process.argv.slice(2)) {
     // once and then every reason under it.
     const versionDrift = checkVersionInSync(pkg, lock);
     const offenders = checkMetadataFields(lock);
-    if (versionDrift !== null || offenders.length > 0) {
+    const familyProblems = checkPeerLockedFamilies(pkg, lock, workspace.name);
+    if (versionDrift !== null || offenders.length > 0 || familyProblems.length > 0) {
       process.stdout.write(`check-lockfile: validating workspace '${workspace.name}' ... FAIL\n`);
       if (versionDrift !== null) {
         printVersionDriftMessage(workspace, versionDrift);
@@ -404,7 +856,17 @@ export function main(argv = process.argv.slice(2)) {
       if (offenders.length > 0) {
         printMetadataMessage(workspace, offenders);
       }
-      firstFailure = { kind: versionDrift !== null ? 'version-drift' : 'metadata' };
+      if (familyProblems.length > 0) {
+        printPeerLockedFamilyMessage(workspace, familyProblems);
+      }
+      firstFailure = {
+        kind:
+          versionDrift !== null
+            ? 'version-drift'
+            : offenders.length > 0
+              ? 'metadata'
+              : 'peer-locked-family',
+      };
     }
   }
   if (firstFailure) {
@@ -412,7 +874,9 @@ export function main(argv = process.argv.slice(2)) {
   }
 
   if (metadataOnly) {
-    console.log('check-lockfile: OK (root + api/ lockfile metadata: version, resolved, integrity)');
+    console.log(
+      'check-lockfile: OK (root + api/ lockfile metadata: version, resolved, integrity; peer-locked families in lockstep)',
+    );
     return 0;
   }
 
