@@ -176,6 +176,225 @@ comment rather than leaving a claim the config cannot honor.
 
 ---
 
+## Grouped security updates
+
+The rule above says a family group "only governs Dependabot's
+**version-update** output." This section is why that qualifier is load-
+bearing, and why adding `applies-to: security-updates` does not remove
+it.
+
+### The invisible default (issue #506)
+
+`groups.*.applies-to` defaults to `version-updates` when omitted. Every
+group in this repo omitted it, so security-driven PRs bypassed grouping
+entirely and arrived one per vulnerable package. Four Angular advisories
+produced #468-#471, each bumping a single `@angular/*` package, each
+failing at `npm ci`:
+
+```
+npm error code ERESOLVE
+npm error While resolving: @angular/animations@21.2.15
+npm error Found: @angular/core@21.2.17
+```
+
+Every group now declares `applies-to` explicitly, and
+`scripts/check-dependabot-config.mjs` fails the build if one does not.
+The default was not wrong; being invisible was.
+
+### Grouping consolidates the alarm. It does not fix it.
+
+A `-security` group turns N unmergeable PRs into **one** unmergeable PR.
+That is worth having -- one triage item instead of four, a quarter of
+the CI -- but it is not remediation, and the config comments must not
+imply otherwise.
+
+The reason is that a security job restricts group membership to the
+packages that actually carry an alert. Three independent filters:
+
+```ruby
+def allowed_dependencies
+  if job.security_updates_only?
+    dependencies.select { |d| T.must(job.dependencies).include?(d.name) }
+  else
+    dependencies.select { |d| job.allowed_update?(d) }
+  end
+end
+```
+-- `dependabot-core:updater/lib/dependabot/dependency_snapshot.rb`
+
+`assign_to_groups!(dependencies: allowed_dependencies)` then populates
+groups from that filtered list, and `GroupDependencySelector#filter_to_group!`
+re-applies `job.allowed_update?(dep, check_previous_version: true)`
+after resolution, which rejects any non-vulnerable dependency in
+security mode. `allow` is bypassed in security mode, so **no
+configuration key widens membership.**
+
+For an exact-pin family that is fatal. When four of the ten `@angular/*`
+runtime packages are alerted, the grouped PR bumps those four and leaves
+six behind -- still `ERESOLVE`. Two further reasons it cannot resolve
+itself:
+
+- **Per-package version floors.** Each package resolves to its own
+  minimum patched version (`fetch_lowest_security_fix_version` takes
+  `.min_by(&:version)`), so one grouped PR can carry `21.2.16` for
+  `platform-server` and `21.2.17` for the rest -- mutually
+  unsatisfiable, since `platform-server@21.2.16` exact-peers the others
+  at `21.2.16`.
+- **npm is invoked with `--force`.** The lockfile updater runs
+  `npm install <dep>@<ver> --force --ignore-scripts --package-lock-only`,
+  which *writes a peer-inconsistent lockfile* rather than floating the
+  peers. Upstream says so directly: *"Peer deps can be updated with
+  `--legacy-peer-deps` flag, but it is not recommended ... So we let the
+  update fail."*
+
+So the remedy for a peer-locked family is unchanged: a lockstep bump via
+the **version-update** group, or by hand. See the runbook below.
+
+Groups where a security counterpart is *inert* -- `vitest`,
+`playwright` -- get no `-security` group at all. Their vulnerable
+members are transitive and exact-pinned by a parent, so the security
+updater cannot open a PR for them under any configuration. Creating an
+empty group to satisfy a symmetry rule would be ceremony;
+`GROUP_POLICY` records the posture instead.
+
+### `update-types` on a security group is structurally broken
+
+GitHub's documented Example 4 shows `update-types: [patch, minor]` on an
+`applies-to: security-updates` group. **Do not copy it.** The SemVer
+gate compares against the registry's newest release:
+
+```ruby
+latest_version = version_class.new(checker.latest_version)
+return update_types.include?("major") if latest[:major] > current[:major]
+```
+-- `dependabot-core:updater/lib/dependabot/updater/group_update_creation.rb`
+
+On the version path that composes correctly, because `latest_version`
+is ignore-filtered. On the security path ignores are inert (next
+section), so `latest_version` can never be lowered by config -- and
+`semver_rules_allow_grouping?` has no security-mode branch, while the
+adjacent `all_versions_ignored?` does, so the asymmetry is deliberate
+upstream.
+
+Net: with Angular 22 published, a `[minor, patch]` Angular security
+group rejects every `@angular/*` package and each one falls through to
+an individual PR -- reproducing #506 while looking like a fix. The gate
+rejects `update-types` on any security group.
+
+### The two forms of `ignore` have opposite security semantics
+
+This is the sharpest edge in the whole config, because the two forms
+look almost identical:
+
+```ruby
+def ignored_versions(dependency, security_updates_only)
+  return versions if security_updates_only
+  return [ALL_VERSIONS] if versions.empty? && transformed_update_types.empty?
+  versions_by_type(dependency) + versions
+end
+```
+-- `dependabot-core:common/lib/dependabot/config/ignore_condition.rb`
+
+| Ignore entry | Version updates | Security updates |
+| --- | --- | --- |
+| `update-types:` only | suppressed | **NOT** suppressed |
+| `versions:` present | suppressed | **suppressed** |
+
+`update_types` is only consulted by `versions_by_type`, which the
+`security_updates_only` short-circuit makes unreachable. Corroborated by
+`job.rb`'s `ignored_versions_from_allowed_update_types`
+(`return [] if security_updates_only?`), and dependabot-core
+self-documents it: `log_ignore_conditions_for` prints
+`" (doesn't apply to security update)"` next to each update type.
+
+**Practical consequence:** every `ignore` in this repo is
+`update-types`-scoped, so none of them can mask an advisory. An entry
+carrying `versions:` *can*, so `IGNORE_POLICY` in
+`check-dependabot-config.mjs` requires that form to declare
+`suppressesSecurity: true`. You cannot add the dangerous shape by
+accident.
+
+One more asymmetry worth knowing: `ignore` globs match
+case-*insensitively* (`wildcard_match?` lowercases both sides), while
+`allowed_dependencies` uses a case-*sensitive* `Array#include?`
+(dependabot-core #14665). Mixed-case package names can silently drop out
+of a security group.
+
+### Why Angular majors are ignored
+
+Version updates always target `checker.latest_version`. `update-types`
+on a group only *routes* a candidate; it does not retarget one. So while
+Angular 22 is published and the repo is on 21.2.x, the `angular` group
+proposes 22.x **or nothing** -- and 22.x cannot install, because it
+requires TypeScript 6 (#550).
+
+That is not merely an unmergeable PR. It starves the 21.2.x patch train,
+which is the only mergeable delivery path for an Angular security fix.
+`ignore` is the sole key that lowers `latest_version` (via
+`filter_ignored_versions`), which is why the entry exists and why it is
+`update-types`-scoped rather than `versions:`-scoped.
+
+Two caveats recorded at the entry itself:
+
+- `ignore` has no `exclude-patterns`, so `'@angular/*'` also freezes
+  `@angular/material` / `@angular/cdk` majors, crossing the carve-out
+  the groups draw. Benign today (Material 22 peers `@angular/core: ^22`
+  and could not install on Angular 21 anyway), but it is a boundary
+  erased in one key that another key draws.
+- `@angular-devkit` is **enumerated, not globbed**.
+  `@angular-devkit/architect` and `/build-webpack` version as
+  `0.2102.x`, and `ignored_major_versions` increments segment 0, so a
+  glob emits `">= 1.a"` and does not gate the Angular 22 line
+  (`0.2200.x`) at all. Both are transitive-only today, so the glob would
+  have implied coverage the mechanism does not provide.
+
+**Residual risk.** If an Angular advisory is ever patched *only* in a
+major, the security PR still opens (the ignore does not suppress it),
+but it bumps just the alerted subset to 22.x and `ERESOLVE`s -- while
+the version-path escape hatch is suppressed. #550 bounds this.
+
+### Runbook: an `angular-security` (or `material-security`) PR appears
+
+1. **Expect it to be red.** Check whether the alerted set is the whole
+   peer cluster with a common floor. If not, the PR cannot merge -- that
+   is the design, not a bug.
+2. **Read the true floor** across all open alerts for the family:
+   `gh api repos/OWNER/REPO/dependabot/alerts --jq '...first_patched_version'`.
+   Take the highest, then use the newest published patch at or above it.
+3. **Do the lockstep bump by hand**, moving every declared member of the
+   family in `PEER_LOCKED_FAMILIES` together -- not just the alerted
+   ones. `npm run lint:lockfile` asserts you did.
+4. **Never** reach for `--legacy-peer-deps` or `--force` to make a
+   partial bump install (AGENTS.md Section 2 and Section 7 #12).
+5. **Close the alarm PR** once the lockstep bump lands. Leaving it open
+   is not harmless: an open group PR causes Dependabot to skip that
+   group on subsequent runs (`find_existing_group_pr` ->
+   `mark_group_handled` -> `next`, matched by group *name*), so a stale
+   PR can silently starve the next advisory.
+
+### Watch the `overrides` interaction
+
+A grouped `dev-security` PR can include a package that also has a root
+`overrides` entry -- `fast-uri` and `hono` both qualify today. The
+override pins the resolution, so a bump past it is silently resolved
+back down. Move the override in the same PR, subject to the rule at the
+top of this document: never bump an override for a package whose shipped
+bytes it does not control.
+
+### What the gate does and does not prove
+
+`scripts/check-dependabot-config.mjs` validates the **file**. It cannot
+prove GitHub acts on it -- the same structural ceiling
+`check-swa-config.mjs` documents for itself. Observing a real run is the
+only proof, and #535 (scheduled alert-to-PR coverage auditor) is the
+runtime half.
+
+Note one blind spot #535 inherits from this change: it cross-references
+open alerts against open PRs, so an unmergeable `angular-security` alarm
+PR reads as "covered" when it is not.
+
+---
+
 ## Registry provenance in the lockfile
 
 Every **registry tarball** entry in a committed lockfile must have a
@@ -566,6 +785,17 @@ explicitly listed in `VENDORED_PACKAGES`.
 ## Related
 
 - Issue #514 - the DOMPurify override audit that produced this document.
-- `scripts/check-dependency-overrides.mjs` - the enforcing gate.
+- Issue #533 - the Vitest lockstep incident behind "Peer-locked
+  dependency families".
+- Issue #506 - the grouped-security-updates gap behind "Grouped security
+  updates"; #536 is the gate that closed it.
+- Issue #550 - the Angular 22 / TypeScript 6 migration that unblocks the
+  `@angular/*` major `ignore`.
+- Issue #535 - the scheduled alert-to-PR coverage auditor (the runtime
+  half these lint-time gates cannot cover).
+- `scripts/check-dependency-overrides.mjs` - the override gate.
+- `scripts/check-dependabot-config.mjs` - the Dependabot config gate.
+- `scripts/check-lockfile.mjs` - `PEER_LOCKED_FAMILIES`, the lockstep
+  detection half.
 - `DESIGN_SPEC.md` -> Security - the normative rule.
 - `AGENTS.md` Sections 6 and 7 - contributor and agent guidance.
