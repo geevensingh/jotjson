@@ -197,6 +197,30 @@ jobs:
         id: lint-dependency-overrides
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:dependency-overrides
+      - name: Lint - Dependabot config
+        # Issue #506 / #536. Structural gate over `.github/dependabot.yml`.
+        # The motivating defect was an invisible default contradicting a
+        # visible comment: `groups.*.applies-to` defaults to
+        # `version-updates`, so the `angular` group -- whose comment said it
+        # existed to make Angular land as "a single mergeable change" --
+        # silently did not apply to security updates. Four advisories
+        # produced four single-package PRs, every one unmergeable at
+        # `npm ci` because the runtime peer-locks with exact pins.
+        #
+        # Asserts: explicit applies-to on every group; no update-types on a
+        # security group (structurally broken there -- the SemVer gate
+        # compares against latest_version, which security-path ignores
+        # cannot lower); every group classified in GROUP_POLICY with a kind
+        # and security posture; every ignore entry classified in
+        # IGNORE_POLICY, with the security-suppressing `versions:` form
+        # required to declare itself; and cross-checks against
+        # PEER_LOCKED_FAMILIES in check-lockfile.mjs so prevention (the
+        # group) and detection (the lockstep assertion) describe the same
+        # family. Pure function of the working tree -- no node_modules
+        # beyond js-yaml, which the job has already installed.
+        id: lint-dependabot-config
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:dependabot-config
       - name: Lint - Unused code
         # knip-driven detection of orphan npm deps, unused exports/types,
         # and unused files across the root SPA + api/ workspaces. All
@@ -261,6 +285,7 @@ jobs:
           OUTCOME_SW_SHAPE: ${{ steps.lint-sw-shape.outcome }}
           OUTCOME_LAUNCH_ARGS: ${{ steps.lint-launch-args.outcome }}
           OUTCOME_DEPENDENCY_OVERRIDES: ${{ steps.lint-dependency-overrides.outcome }}
+          OUTCOME_DEPENDABOT_CONFIG: ${{ steps.lint-dependabot-config.outcome }}
           OUTCOME_UNUSED: ${{ steps.lint-unused.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
           OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
@@ -304,6 +329,7 @@ jobs:
             emit "SW shape"                "$OUTCOME_SW_SHAPE"     "npm run lint:sw-shape - if src/sw.worker.ts changed intentionally, update EXPECTED_SW_SOURCE_SHA256 in scripts/check-sw-shape.mjs"
             emit "Vitest launch args"      "$OUTCOME_LAUNCH_ARGS"  "npm run lint:launch-args - vitest.shared.mts must keep COMMON_LAUNCH_ARGS intact and return provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }); never pass flags via instances[].launch (PR #418)"
             emit "Dependency overrides"   "$OUTCOME_DEPENDENCY_OVERRIDES" "npm run lint:dependency-overrides - classify the new override in OVERRIDE_POLICY (scripts/check-dependency-overrides.mjs), or, if it targets a package vendored inside a prebuilt asset, remove the override and bump the vendoring package instead; see docs/supply-chain.md"
+            emit "Dependabot config"      "$OUTCOME_DEPENDABOT_CONFIG" "npm run lint:dependabot-config - every group needs an explicit applies-to and a GROUP_POLICY entry; every ignore needs an IGNORE_POLICY entry; security groups must not carry update-types (scripts/check-dependabot-config.mjs); see docs/supply-chain.md -> Grouped security updates"
             emit "Unused code"             "$OUTCOME_UNUSED"       "npm run lint:unused - either remove the unused export/dep/file, add a workspace 'entry' pattern (for files reachable only via a runtime convention knip can't see, e.g. Playwright's testDir), or add the dep to knip.jsonc ignoreDependencies (or ignoreBinaries, for CLI tools invoked from scripts); every allowlist addition needs a rationale comment naming the specific (not generic) mechanism by which the dep/entry is used"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
             emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs" test

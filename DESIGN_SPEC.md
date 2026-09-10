@@ -1265,6 +1265,31 @@ enforcement and the field together in the same PR, or not at all.
   and the preferred end-state are documented in `docs/supply-chain.md`
   (issue #514).
 
+- **Dependency update policy must be machine-checked, not just
+  commented.** `.github/dependabot.yml` encodes security-relevant policy -
+  which packages are grouped, which majors are suppressed - and its
+  correctness is otherwise unobservable until the next scheduled run.
+  `scripts/check-dependabot-config.mjs` (lint chain) enforces it. Every
+  group must declare `applies-to` explicitly: the key defaults to
+  `version-updates`, and that invisible default meant the `angular` group
+  never applied to security updates, so four Angular advisories produced
+  four single-package PRs that could not install against the family's exact
+  peer pins (issue #506). No `security-updates` group may carry
+  `update-types`, which is structurally broken on that path because the
+  SemVer gate compares against the registry's newest release and
+  security-path ignores cannot lower it. Every group is classified in
+  `GROUP_POLICY` with a kind and a security posture, and every `ignore`
+  entry in `IGNORE_POLICY` with a rationale - the same named-mechanism
+  forcing function the overrides gate uses. Because an `ignore` carrying
+  `versions:` suppresses security updates while an `update-types`-scoped
+  one does not, the former must declare `suppressesSecurity: true`. The
+  group registry is additionally cross-checked in both directions against
+  `PEER_LOCKED_FAMILIES` in `scripts/check-lockfile.mjs`, so prevention
+  (the group) and detection (the lockstep assertion) cannot describe
+  different families. Note the structural ceiling: the gate validates the
+  config file, not GitHub's behavior. See `docs/supply-chain.md` ->
+  "Grouped security updates" (issues #506, #536).
+
 ### Scalability
 - Cosmos DB serverless scales automatically.
 - Azure Functions consumption plan scales to zero when idle.
