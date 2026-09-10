@@ -108,6 +108,177 @@ version.
 
 ---
 
+## Peer-locked dependency families
+
+Some packages peer-depend on each other at an **exact** version, so no
+partial bump can resolve -- npm `ERESOLVE`s on install. The Angular
+runtime + devkit are one such family; the Vitest toolchain is another:
+
+```
+@vitest/browser-playwright@X
+  dependencies:      @vitest/browser  "X"   <- exact
+  peerDependencies:  vitest           "X"   <- exact
+
+@vitest/coverage-v8@X
+  peerDependencies:  vitest           "X"   <- exact
+                     @vitest/browser  "X"   <- exact (optional)
+
+vitest@X
+  peerDependencies:  @vitest/browser-playwright  "X"  <- exact (optional)
+                     @vitest/coverage-v8         "X"  <- exact (optional)
+```
+
+The lock is bidirectional, and one member (`@vitest/browser`) is a pure
+transitive that appears nowhere in `package.json`.
+
+### The rule
+
+Any root family whose members peer-depend on each other with exact pins
+gets all three of:
+
+1. **Its own Dependabot group** in `.github/dependabot.yml`, covering
+   the peer closure, with a comment naming the constraint.
+2. **An exclude in `dev-minor`** (or whatever generic group would
+   otherwise capture it), so members always route to the family group.
+3. **A lockstep assertion** in `PEER_LOCKED_FAMILIES` in
+   `scripts/check-lockfile.mjs`, listing the declared members and any
+   exact-pinned transitive `followers`.
+
+All three are required because they cover different inbound paths. The
+group is *prevention* and only governs Dependabot's **version-update**
+output; the `check-lockfile.mjs` assertion is *detection* and covers a
+security-update PR, a human, or an agent session equally.
+
+### Why (issue #533)
+
+`@vitest/browser` carried two critical advisories (CVE-2026-53633,
+CVE-2026-73653) while sitting in `dev-minor`. Dependabot's **security**
+updater could never remediate it: it is transitive, and its parent pins
+it exactly, so there was no standalone PR to open. The fix could only
+ever ride inside a version-update PR -- and it did, in group PR #491
+(`@vitest/browser-playwright` and `@vitest/coverage-v8` 4.1.7 ->
+4.1.10). When #491 was superseded by the regenerated #523, the
+`@vitest/*` bumps were dropped while co-tenants survived. The advisories
+stayed open with no signal that the remediation had vanished.
+
+This is the same class as the #514 DOMPurify case below: **the package
+that is actually vulnerable is not the package anyone is watching.**
+
+### Known limit
+
+Group membership is the exact-peer-locked set only. A package that
+straddles two families cannot be assigned correctly by any grouping --
+`@analogjs/vitest-angular` peers `vitest` at `^4.0.0` *and*
+`@angular-devkit/architect`, so it stays in `dev-minor`. A Vitest
+**major** therefore still needs a coordinated `@analogjs/vitest-angular`
+bump that Dependabot will not bundle. Document such limits in the group
+comment rather than leaving a claim the config cannot honor.
+
+---
+
+## Registry provenance in the lockfile
+
+Every **registry tarball** entry in a committed lockfile must have a
+`resolved` URL that points at `registry.npmjs.org` over `https`, carries no
+userinfo, query string, or fragment, and an `integrity` that is `sha512-`.
+All of it is enforced by `checkMetadataFields` in
+`scripts/check-lockfile.mjs`, which runs in CI *before* `npm ci`.
+
+Two entry kinds are deliberately exempt, because they are not registry
+tarballs:
+
+- **`file:` sources** -- a local path, so there is no host to check.
+- **Git sources** (`git+...`) -- npm records no `integrity` for these, so
+  the gate instead requires the URL be pinned to a 40-hex commit SHA,
+  which is the only thing that fixes the content.
+
+The repo currently has neither, but the exemptions are in the checker so
+adding one later does not require weakening the registry rule.
+
+**Remote tarballs from other hosts are forbidden**, even with a valid
+sha512. `https://example.com/pkg.tgz` is a dependency Dependabot cannot
+version-update or security-patch and that `npm audit` cannot see -- a
+package nobody is watching, which is the failure class behind #514 and
+#533. If one is ever genuinely required, relax the gate deliberately and
+record the justification, the same way root `overrides` are classified.
+
+### Scope: this codifies the existing state, it does not change workflow
+
+This is not a new constraint on how you install. Before PR #534 every one
+of the 1214 entries in the root lockfile already resolved to
+`registry.npmjs.org` with a sha512 digest -- zero exceptions -- and the
+same held for `api/`. The gate makes that de-facto invariant explicit and
+enforced; it does not migrate anyone off anything.
+
+**Working behind a corporate mirror is still fine.** npm's
+`replace-registry-host` defaults to `npmjs`, which rewrites
+`registry.npmjs.org` hosts to your configured registry *at install time*.
+So a lockfile naming the public registry installs correctly both for
+direct consumers and through a mirror -- verified on #534 by running
+`npm ci` from a proxy against the repaired lockfile. The reverse is not
+true: a lockfile naming a mirror only works for people who can reach that
+mirror. Public URLs are the strictly more portable choice, which is why
+they are the committed form.
+
+The one thing to avoid is *committing* mirror-rewritten entries. Use
+`--registry=https://registry.npmjs.org/` on dependency commands (see
+Prevention below) and the gate never fires.
+
+### The failure mode (PR #534)
+
+If your `npm config get registry` points at a corporate proxy -- an Azure
+DevOps feed, Artifactory, Verdaccio -- then **any** command that
+re-resolves part of the tree will rewrite those entries:
+
+```
+"resolved": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/...",
+"integrity": "sha1-FlPBUhrpF/lg2bIYd3l8R9/YvyE="
+```
+
+Two distinct problems, neither of which any pre-existing gate caught:
+
+1. **Non-reproducible.** Contributors and CI outside that network cannot
+   resolve the URL. It also leaks internal infrastructure names into a
+   public repo.
+2. **Weaker digest.** An Azure DevOps feed advertises the legacy `shasum`
+   rather than `dist.integrity`, so npm records **sha1** instead of
+   sha512.
+
+`npm ci` accepts all of it, and CI can even pass if the proxy happens to
+be publicly reachable -- which is exactly what happened on #534, where 34
+entries were rewritten and every check went green.
+
+### Repairing it
+
+Do **not** regenerate the lockfile; that re-resolves every range and
+floats versions (AGENTS.md Section 7 #13). Repair the affected entries in
+place, taking `resolved` and `integrity` from the public registry:
+
+```
+npm view <name>@<version> dist.tarball dist.integrity \
+  --registry=https://registry.npmjs.org/ --json
+```
+
+`--registry` overrides the configured proxy for metadata reads, so this
+works even on a machine pointed at one. Afterwards, confirm the repair
+changed metadata only:
+
+- `npm run lint:lockfile-metadata` passes.
+- No entry's `version` changed (diff the lockfile and check).
+- Entries also present on `main` at the same version match it exactly.
+
+### Prevention
+
+Prefer running dependency commands with the public registry explicitly:
+
+```
+npm install --registry=https://registry.npmjs.org/ ...
+```
+
+The gate is the backstop, not the plan.
+
+---
+
 ## Case study: DOMPurify vendored inside Monaco (issue #514)
 
 ### What was wrong
