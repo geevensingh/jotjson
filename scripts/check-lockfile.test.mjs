@@ -255,7 +255,12 @@ test('the playwright family is pinned in lockstep, guarding the CI Chromium vers
 // is a root declaration, so a partial bump of one would otherwise slip past.
 test('the angular family asserts its same-version devkit followers', () => {
   const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular');
-  assert.deepEqual([...family.followers].sort(), ['@angular-devkit/core', '@angular/build']);
+  assert.deepEqual([...family.followers].sort(), [
+    '@angular-devkit/core',
+    '@angular-devkit/schematics',
+    '@angular/build',
+    '@schematics/angular',
+  ]);
 
   const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
   const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
@@ -263,6 +268,20 @@ test('the angular family asserts its same-version devkit followers', () => {
   const problems = checkPeerLockedFamilies(pkg, lock, 'root');
   assert.equal(problems.length, 1);
   assert.match(problems[0], /@angular\/build@21\.3\.0/);
+});
+
+// @angular/cli exact-pins these two, and @schematics/angular exact-pins
+// devkit/schematics in turn -- neither is a root declaration, so a stale
+// copy would otherwise pass.
+test('the angular family covers the @angular/cli schematics closure', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  for (const name of ['@angular-devkit/schematics', '@schematics/angular']) {
+    const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+    lock.packages[`node_modules/${name}`].version = '21.3.0';
+    const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+    assert.equal(problems.length, 1, `${name} drift was not caught`);
+    assert.match(problems[0], /^angular family: resolved versions diverge/);
+  }
 });
 
 // The 0.MMmm.pp devkit packages are exact-pinned but on a different
@@ -318,8 +337,11 @@ test('checkMetadataFields flags a private-mirror resolved host', () => {
     }),
   );
   assert.equal(offenders.length, 1);
-  assert.match(offenders[0].reason, /ms-feed-25\.pkgs\.visualstudio\.com/);
-  assert.match(offenders[0].reason, /registry\.npmjs\.org/);
+  assert.match(offenders[0].reason, /does not point at 'registry\.npmjs\.org'/);
+  assert.ok(
+    !/visualstudio/.test(offenders[0].reason),
+    'the mirror host must not be echoed into CI logs',
+  );
 });
 
 test('checkMetadataFields flags sha1 integrity', () => {
@@ -327,7 +349,37 @@ test('checkMetadataFields flags sha1 integrity', () => {
     lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha1-u+EtyltO+YOg0K9LB7m8kOoKuro=' }),
   );
   assert.equal(offenders.length, 1);
-  assert.match(offenders[0].reason, /'sha1', expected 'sha512'/);
+  assert.match(offenders[0].reason, /uses 'sha1', expected 'sha512'/);
+});
+
+// `integrity` is attacker-influenced free text. A dashless value was
+// previously copied verbatim by `split('-')[0]` into public CI logs.
+test('checkMetadataFields does not echo a malformed integrity value', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, integrity: 'SUPERSECRETTOKEN' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /malformed \(no recognized algorithm prefix\)/);
+  assert.ok(!offenders[0].reason.includes('SUPERSECRET'), 'must not echo the value');
+});
+
+test('checkMetadataFields echoes only an allowlisted algorithm label', () => {
+  const offenders = checkMetadataFields(lockWithEntry({ ...GOOD_ENTRY, integrity: 'sha256-abc=' }));
+  assert.match(offenders[0].reason, /uses 'sha256'/);
+});
+
+// The hostname itself can carry a secret (`https://<token>.example/...`),
+// and this reason lands in public CI logs.
+test('checkMetadataFields does not echo the offending host', () => {
+  const offenders = checkMetadataFields(
+    lockWithEntry({ ...GOOD_ENTRY, resolved: 'https://SUPERSECRET.example/x-1.0.0.tgz' }),
+  );
+  assert.equal(offenders.length, 1);
+  assert.match(offenders[0].reason, /does not point at 'registry\.npmjs\.org'/);
+  assert.ok(
+    !/supersecret/i.test(offenders[0].reason),
+    `reason leaked the host: ${offenders[0].reason}`,
+  );
 });
 
 test('checkMetadataFields flags an unparsable resolved URL', () => {
@@ -467,8 +519,9 @@ test('checkMetadataFields rejects a remote tarball on another host despite valid
   );
   assert.equal(offenders.length, 1);
   assert.equal(offenders[0].kind, 'provenance');
-  assert.match(offenders[0].reason, /example\.com/);
+  assert.match(offenders[0].reason, /does not point at 'registry\.npmjs\.org'/);
   assert.match(offenders[0].reason, /Remote tarballs from other hosts are not allowed/);
+  assert.ok(!/example\.com/.test(offenders[0].reason), 'the host must not be echoed');
 });
 
 test('every committed lockfile entry resolves to the public registry with sha512', () => {

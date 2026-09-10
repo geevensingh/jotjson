@@ -148,6 +148,50 @@ test('flags a missing makeBrowserConfig helper outright', () => {
   assert.match(violations[0], /could not find a .*makeBrowserConfig/);
 });
 
+// A whole-tree, last-match lookup let a nested declaration with the
+// expected shape mask a bad top-level one -- the gate passed while the
+// runtime used the bad exported value.
+test('a nested declaration cannot shadow a bad top-level one', () => {
+  const source = [
+    "export const COMMON_LAUNCH_ARGS: readonly string[] = ['--wrong'];",
+    'export function makeBrowserConfig(extraArgs = []) {',
+    '  return { provider: someOtherProvider() };',
+    '}',
+    'function decoyScope() {',
+    "  const COMMON_LAUNCH_ARGS = ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'];",
+    '  function makeBrowserConfig(extraArgs = []) {',
+    '    return { provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }) };',
+    '  }',
+    '}',
+  ].join('\n');
+  const violations = lintSharedConfig(source);
+  assert.equal(violations.length, 2, `expected both invariants to fail: ${violations.join(' | ')}`);
+  assert.ok(violations.some((v) => /--wrong/.test(v)));
+  assert.ok(violations.some((v) => /must be a `playwright/.test(v)));
+});
+
+test('rejects duplicate top-level COMMON_LAUNCH_ARGS declarations', () => {
+  const source = [ARGS_DECL, "const COMMON_LAUNCH_ARGS = ['--other'];", ''].join('\n');
+  const violations = lintSharedConfig(source + helper(GOOD_RETURN, ''));
+  assert.ok(violations.some((v) => /2 top-level `COMMON_LAUNCH_ARGS` declarations/.test(v)));
+});
+
+test('rejects duplicate top-level makeBrowserConfig declarations', () => {
+  const source = [
+    ARGS_DECL,
+    'export function makeBrowserConfig(extraArgs = []) {',
+    `  ${GOOD_RETURN}`,
+    '}',
+    'function makeBrowserConfig(extraArgs = []) {',
+    '  return { provider: other() };',
+    '}',
+  ].join('\n');
+  const violations = lintSharedConfig(source);
+  assert.ok(
+    violations.some((v) => /2 top-level `makeBrowserConfig\(\.\.\.\)` declarations/.test(v)),
+  );
+});
+
 test('flags a helper that returns no object literal', () => {
   const violations = lintSharedConfig(helper('return buildConfig(extraArgs);'));
   assert.equal(violations.length, 1);

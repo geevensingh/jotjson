@@ -117,6 +117,49 @@ function walk(node, visit) {
   node.forEachChild((child) => walk(child, visit));
 }
 
+/**
+ * Top-level `const NAME = ...` declarations, module scope only.
+ *
+ * Scoping matters: a nested declaration with the expected shape must not
+ * be able to satisfy a check about the value the module actually exports.
+ */
+function topLevelVariableDeclarations(sourceFile, name) {
+  const found = [];
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) {
+        found.push(declaration);
+      }
+    }
+  }
+  return found;
+}
+
+/** Top-level function declarations, or `const NAME = () => {}` forms. */
+function topLevelFunctions(sourceFile, name) {
+  const found = [];
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name && statement.name.text === name) {
+      found.push(statement);
+      continue;
+    }
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        ts.isIdentifier(declaration.name) &&
+        declaration.name.text === name &&
+        declaration.initializer &&
+        (ts.isArrowFunction(declaration.initializer) ||
+          ts.isFunctionExpression(declaration.initializer))
+      ) {
+        found.push(declaration.initializer);
+      }
+    }
+  }
+  return found;
+}
+
 /** Renders an array element for a diagnostic without leaking whole files. */
 function describeElement(element) {
   if (ts.isStringLiteral(element)) return `'${element.text}'`;
@@ -133,17 +176,19 @@ function describeElement(element) {
  * collected only quoted literals and silently ignored everything else.
  */
 function checkCommonArgs(sourceFile, path, violations) {
-  let declaration = null;
-  walk(sourceFile, (node) => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === ARGS_CONST
-    ) {
-      declaration = node;
-    }
-  });
-
+  // Top-level statements only, and duplicates rejected. A whole-tree,
+  // last-match walk let a nested declaration with the expected shape mask
+  // a bad top-level one -- the gate passed while the runtime used the bad
+  // value. Module scope is what the config actually exports.
+  const declarations = topLevelVariableDeclarations(sourceFile, ARGS_CONST);
+  if (declarations.length > 1) {
+    violations.push(
+      `${path}: found ${declarations.length} top-level \`${ARGS_CONST}\` declarations. ` +
+        `Exactly one is required, or which value reaches Chromium is ambiguous.`,
+    );
+    return;
+  }
+  const declaration = declarations[0] ?? null;
   if (!declaration || !declaration.initializer) {
     violations.push(
       `${path}: could not find a \`${ARGS_CONST}\` declaration with an initializer. ` +
@@ -180,21 +225,12 @@ function checkCommonArgs(sourceFile, path, violations) {
 
 /** Locates the object literal returned by `makeBrowserConfig`. */
 function findReturnedObject(sourceFile) {
-  let helper = null;
-  walk(sourceFile, (node) => {
-    const isFn =
-      (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) &&
-      node.name &&
-      node.name.text === HELPER;
-    const isArrow =
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === HELPER &&
-      node.initializer &&
-      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer));
-    if (isFn) helper = node;
-    else if (isArrow) helper = node.initializer;
-  });
+  // Top-level only, and duplicates rejected -- same shadowing hazard as
+  // COMMON_LAUNCH_ARGS: a nested `makeBrowserConfig` with the right shape
+  // must not mask a bad exported one.
+  const helpers = topLevelFunctions(sourceFile, HELPER);
+  if (helpers.length > 1) return { helper: null, returned: null, duplicates: helpers.length };
+  const helper = helpers[0] ?? null;
   if (!helper) return { helper: null, returned: null };
 
   // Arrow shorthand: `(args) => ({ ... })`
@@ -226,7 +262,14 @@ function findReturnedObject(sourceFile) {
  * somewhere other than the property Vitest actually consumes.
  */
 function checkProvider(sourceFile, path, violations) {
-  const { helper, returned } = findReturnedObject(sourceFile);
+  const { helper, returned, duplicates } = findReturnedObject(sourceFile);
+  if (duplicates) {
+    violations.push(
+      `${path}: found ${duplicates} top-level \`${HELPER}(...)\` declarations. ` +
+        `Exactly one is required, or which provider reaches Vitest is ambiguous.`,
+    );
+    return;
+  }
   if (!helper) {
     violations.push(
       `${path}: could not find a \`${HELPER}(...)\` function to inspect. ` +

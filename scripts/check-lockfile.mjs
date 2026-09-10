@@ -270,11 +270,16 @@ export function checkMetadataFields(lock) {
       continue;
     }
     if (url.host !== PUBLIC_REGISTRY_HOST) {
+      // The host is NOT echoed. A mirror or malformed URL can carry a
+      // secret in the hostname itself (`https://<token>.example/...`),
+      // and this reason lands in public CI logs -- the same guarantee the
+      // parse-failure, userinfo, and query branches already make. `path`
+      // identifies the entry; the reader opens the lockfile to see it.
       offenders.push({
         path,
         kind: 'provenance',
         reason:
-          `\`resolved\` points at '${url.host}', not '${PUBLIC_REGISTRY_HOST}'. ` +
+          `\`resolved\` does not point at '${PUBLIC_REGISTRY_HOST}'. ` +
           `If this came from a corporate mirror, re-resolve with ` +
           `\`--registry=https://${PUBLIC_REGISTRY_HOST}/\`. Remote tarballs from ` +
           `other hosts are not allowed: Dependabot and npm audit cannot see them.`,
@@ -321,10 +326,18 @@ export function checkMetadataFields(lock) {
     // sha1 entry means the metadata came from somewhere else.
     const integrity = String(record['integrity']);
     if (!integrity.startsWith('sha512-')) {
+      // Only an allowlisted algorithm label is echoed. `integrity` is
+      // attacker-influenced free text -- a dashless value like a raw token
+      // would otherwise be copied verbatim into public CI logs by
+      // `split('-')[0]`, defeating the no-secret guarantee the sibling
+      // branches make.
+      const algorithm = /^(sha1|sha256|sha384|sha512)-/.exec(integrity)?.[1];
       offenders.push({
         path,
         kind: 'provenance',
-        reason: `\`integrity\` is '${integrity.split('-')[0]}', expected 'sha512'`,
+        reason: algorithm
+          ? `\`integrity\` uses '${algorithm}', expected 'sha512'`
+          : "`integrity` is malformed (no recognized algorithm prefix), expected 'sha512'",
       });
     }
   }
@@ -505,10 +518,18 @@ export const PEER_LOCKED_FAMILIES = [
       '@angular/cli',
       '@angular-devkit/build-angular',
     ],
-    // Pinned by @angular-devkit/build-angular at the family version, and
-    // absent from package.json. The `0.2102.22`-mapped devkit packages are
-    // excluded by design -- see the version-mapping note above.
-    followers: ['@angular-devkit/core', '@angular/build'],
+    // Pinned at the family version and absent from package.json:
+    // build-angular pins core + @angular/build; @angular/cli pins
+    // @angular-devkit/schematics and @schematics/angular, and
+    // @schematics/angular pins core + schematics in turn. The
+    // `0.2102.22`-mapped devkit packages are excluded by design -- see the
+    // version-mapping note above.
+    followers: [
+      '@angular-devkit/core',
+      '@angular-devkit/schematics',
+      '@angular/build',
+      '@schematics/angular',
+    ],
   },
   // Material and CDK peer-lock to each other exactly but ship on their own
   // release cadence, which is why dependabot.yml carves them out of the
