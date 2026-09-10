@@ -1243,6 +1243,53 @@ enforcement and the field together in the same PR, or not at all.
   - `Permissions-Policy: clipboard-read=(self), clipboard-write=(self)` - scopes the Clipboard API to the site's own origin so the Smart Paste polling (Home page §1) can read the clipboard without cross-origin leakage.
   - **Content Security Policy** - the full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader, a SHA-256 hash for the inline splash script, plus `'unsafe-hashes'` and a SHA-256 hash for the inline `onload="this.media='all'"` event handler Angular's `optimization.styles.inlineCritical` build pass injects into prerendered HTML for deferred-print-CSS preloading; `script-src-attr` is intentionally omitted so legacy browsers fall back to `script-src`'s hash list per CSP3), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights (`*.in.applicationinsights.azure.com` ingestion, `*.livediagnostics.monitor.azure.com` live metrics, `js.monitor.azure.com` SDK runtime config CDN), `font-src 'self' data:` (the `data:` source is required because Monaco's `vs/editor/editor.main.css` ships its codicon icon font inline as a `data:font/ttf;base64,...` URL inside an `@font-face` block), plus `frame-ancestors 'self'` (matches `X-Frame-Options: SAMEORIGIN` so MSAL silent refresh continues to work), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights hosts - including the SDK config CDN - are still covered by the policy). The `--src` and `--dist` modes additionally assert the structural shape of the policy itself: that `'unsafe-hashes'` and the inline-handler hash are still present on `script-src`, that `script-src-attr` has not been re-added, that `font-src` still carries `data:`, and that `frame-src` and `frame-ancestors` both still carry `'self'` (required for the MSAL silent-refresh iframe's 302 redirect-back from the IdP to the SPA's own origin; sibling to `X-Frame-Options: SAMEORIGIN`) - so a future contributor cannot quietly drop one of these tokens and ship a broken policy. The deployed-headers e2e spec at `e2e/preview/security-headers.spec.ts` additionally parses the actually-served CSP value and asserts the same `frame-src 'self'` / `frame-ancestors 'self'` invariants survive the SWA / Azure Front Door / CDN delivery path. The `--dist` mode hashes all three production HTML files (`index.html`, `404/index.html`, `shell.html` - the SPA navigation fallback served on every non-prerendered route) and detects stale (unused) hashes in `script-src` so the policy does not bit-rot. See "CSP allowlist" further down for the App Insights origin rationale. See the PWA section for the post-deploy noise behavior that installed service workers can exhibit after a CSP-only deploy (tracked in issue #167). Sibling gate: `scripts/check-swa-config.mjs` covers the non-CSP globalHeaders entries above, the navigation-fallback rewrite, the route-order shadowing class, the deployment Cache-Control rule groups, `platform.apiRuntime`, and the `.webmanifest` MIME type.
 
+- **Dependency overrides must not misreport what ships.** An `overrides`
+  entry in `package.json` may never be used to change the *reported* version
+  of a package that ships vendored inside a prebuilt asset. Such a pin
+  changes only `node_modules/`, so bumping it closes Dependabot alerts
+  without altering a single shipped byte - and can additionally hide
+  advisories that affect the older shipped copy. The only real remediation
+  is to bump the vendoring package. Every root override must be classified
+  (`dev-only` / `prod-graph` / `shipped-prebuilt`) and justified with a named
+  consumer and a rationale, for every classification.
+  `scripts/check-dependency-overrides.mjs` (lint chain) enforces both halves:
+  it validates the classification table and, for
+  `shipped-prebuilt` entries, reads the version out of the bytes
+  `angular.json` actually copies and asserts no override contradicts it. The
+  two registries are additionally cross-checked in both directions, so a
+  classification that disagrees with what actually ships cannot slip between
+  them. The
+  motivating case - DOMPurify 3.2.7 vendored inside `monaco-editor`'s
+  `min/vs` while an override claimed 3.4.1, suppressing eight true
+  advisories - plus the full overrides audit, the reachability assessment,
+  and the preferred end-state are documented in `docs/supply-chain.md`
+  (issue #514).
+
+- **Dependency update policy must be machine-checked, not just
+  commented.** `.github/dependabot.yml` encodes security-relevant policy -
+  which packages are grouped, which majors are suppressed - and its
+  correctness is otherwise unobservable until the next scheduled run.
+  `scripts/check-dependabot-config.mjs` (lint chain) enforces it. Every
+  group must declare `applies-to` explicitly: the key defaults to
+  `version-updates`, and that invisible default meant the `angular` group
+  never applied to security updates, so four Angular advisories produced
+  four single-package PRs that could not install against the family's exact
+  peer pins (issue #506). No `security-updates` group may carry
+  `update-types`, which is structurally broken on that path because the
+  SemVer gate compares against the registry's newest release and
+  security-path ignores cannot lower it. Every group is classified in
+  `GROUP_POLICY` with a kind and a security posture, and every `ignore`
+  entry in `IGNORE_POLICY` with a rationale - the same named-mechanism
+  forcing function the overrides gate uses. Because an `ignore` carrying
+  `versions:` suppresses security updates while an `update-types`-scoped
+  one does not, the former must declare `suppressesSecurity: true`. The
+  group registry is additionally cross-checked in both directions against
+  `PEER_LOCKED_FAMILIES` in `scripts/check-lockfile.mjs`, so prevention
+  (the group) and detection (the lockstep assertion) cannot describe
+  different families. Note the structural ceiling: the gate validates the
+  config file, not GitHub's behavior. See `docs/supply-chain.md` ->
+  "Grouped security updates" (issues #506, #536).
+
 ### Scalability
 - Cosmos DB serverless scales automatically.
 - Azure Functions consumption plan scales to zero when idle.
@@ -1925,9 +1972,9 @@ ID test tenant.
 | Layer | In place? | Purpose |
 |---|---|---|
 | Static analysis | yes | TypeScript `tsc --noEmit`, ASCII gate, spec-pattern lint, `staticwebapp.config.json` validator (`check-swa-config.mjs`). |
-| Unit (frontend) | yes | Component / service / pipe / pure logic; Monaco and other browser globals are stubbed. Co-located `*.spec.ts`. |
+| Unit (frontend) | yes | Component / service / pipe / pure logic; Monaco and other browser globals are stubbed. Co-located `*.test.ts`. |
 | Unit (api) | yes | Azure Functions handlers and shared modules; Cosmos and Blob clients are mocked. |
-| Browser integration | yes | Real Monaco loaded once per suite via the project's loader. Verifies the loader, the asset path, and the editor's mount + value roundtrip with a real DOM. Lives alongside frontend unit specs but is named `*.integration.spec.ts`. |
+| Browser integration | yes | Real Monaco loaded once per suite via the project's loader. Verifies the loader, the asset path, and the editor's mount + value roundtrip with a real DOM. Lives alongside frontend unit specs but is named `*.integration.test.ts`. |
 | API integration | v1 gate (active) | Functions + shared modules against a CI-only real Cosmos DB free-tier account (1000 RU/s + 25 GB free forever; per-run unique database name; secret-presence check skips fork PRs). Catches partition-key, query-shape, and continuation-token mistakes that mocks cannot. The `vnext-preview` Linux emulator is rejected as a harness due to acknowledged flakiness. Tracked in issue #63. |
 | Smoke e2e (anonymous) | v1 gate (active) | Playwright on critical anonymous user flows in Chromium, per-PR. Catches MSAL redirect, router lazy-load, service-worker, and CSP regressions that unit + browser-integration cannot. Tracked in issue #64. |
 | Preview-env smoke | shadow (active) | Same anonymous smoke harness, but pointed at a per-PR SWA preview environment on the nonprod stack (`pr-<N>` on `swa-jotjson-nonprod`) via `PLAYWRIGHT_BASE_URL`. Catches deploy-pipeline regressions (SWA config drift, CSP, service worker, redirect rules) that the locally-served-from-`dist` anonymous smoke cannot. Driven by `.github/workflows/cd-preview.yml`; lives under shadow mode (`continue-on-error: true` on the `Run Playwright tests` **step** of the `e2e-preview` job, so a red smoke does not block the build-and-deploy job's success or the PR) for ~1 week from PR #210 merge, then flipped to required. Tracked in issue #93 (Phase 2) / #179. |
@@ -1947,6 +1994,42 @@ What this layer model deliberately does *not* claim:
 
 Layer names above are runner-neutral so this model survives runner migrations
 (see issue #47 - test-runner migration).
+
+### Irreversible realm mutations
+
+Some browser resources cannot be un-loaded once evaluated. Monaco's AMD
+loader is the current example: `vs/loader.js` is a classic script whose
+first statement is `const _amdLoaderGlobal = this`, so evaluating it a
+second time in the same realm is a hard `SyntaxError` (issue #513) -
+which also fires a spurious "did not attach window.require" rejection,
+because the HTML spec still dispatches `load` for a script whose
+evaluation threw. Deleting the globals it installed, removing its
+`<script>` element, or discarding a module-level cached promise does not
+undo the evaluation; it only makes the guards lie.
+
+The rules this repo follows for any such resource:
+
+- **The loader owns the invariant.** "Already evaluated in this realm"
+  is recorded at realm scope (on `window`), not in module state and not
+  in the DOM, so it survives module re-instantiation, test files
+  sharing a realm, and any test seam.
+- **Test seams reset only what is genuinely resettable.** The Monaco
+  seam (`__resetMonacoLoaderCacheForTesting`) clears the module's
+  memoized promise and nothing else. A test that installs a `window.*`
+  fake owns restoring it; a test that installs a loader override clears
+  it with `__setMonacoLoaderPromiseForTesting(undefined)`.
+- **Unit layers substitute, only browser integration evaluates.** Unit
+  specs that mount `<jj-json-editor>` pin a stub loader for the whole
+  file (`pinMinimalMonacoLoaderForFile`), because a per-test
+  `window.monaco` stub does not cover an async component lifecycle that
+  outlives its test. `json-editor.component.integration.test.ts` is the
+  only spec permitted to evaluate the real loader.
+
+Vitest browser mode shares realms across test files in this repo's
+configuration, so cross-file leakage is a live concern rather than a
+theoretical one. A spec file that needs a particular loader state
+declares it on entry rather than trusting the previous file to have
+cleaned up.
 
 ### Static-shape vs runtime invariants: a placement rubric
 
@@ -3562,6 +3645,35 @@ Out of scope (for v1):
   click reach into the legacy `<input type="file">` fallback to size a
   future download-on-save fallback). DESIGN_SPEC s "Local file editing"
   subsection extended with a "Write-back (1.4.0)" block.
+- **1.4.1**: Angular security patch - all `@angular/*` and
+  `@angular-devkit/*` packages bumped to 21.2.22 in lockstep. Clears ten
+  open Dependabot alerts (nine high, one medium, all runtime scope)
+  covering nine unique CVEs: CVE-2026-50555 / CVE-2026-50556 /
+  CVE-2026-69149 (`platform-server`), CVE-2026-54266 / CVE-2026-54268 /
+  CVE-2026-68945 (`common`), CVE-2026-54267 (`core`), CVE-2026-54265
+  (`compiler`), and CVE-2026-69151 (`core` + `compiler`, hence ten alerts
+  from nine CVEs). Mostly XSS - i18n event-handler attributes, SSR
+  raw-content escaping, two-way-binding sanitization bypass - plus
+  HttpTransferCache cross-request poisoning and a `formatDate` OOM DoS.
+  The last two have no live exposure surface here (no
+  `provideClientHydration` / `TransferState`; Angular's `formatDate` is
+  unused in favor of the repo's own `formatDateAnnotation`), but the fix
+  is taken regardless. All 13 packages had to move together: the
+  framework peer-locks with **exact** pins (`@angular/core@21.2.22` peers
+  `@angular/compiler@"21.2.22"`), which is why the four single-package
+  Dependabot PRs (#468-#471) were unmergeable at install and each
+  targeted below the 21.2.19 fix floor. `typescript` stays `~5.9.3` (it
+  already satisfies every 21.2.22 peer) and `@angular/cdk` /
+  `@angular/material` stay at 21.2.12 - they ride a separate release
+  cadence, peer `@angular/core` on a caret range, and carry no alerts.
+  Forced transitives moved with the train and incidentally cleared
+  several dev-scope alerts: postcss 8.5.23, undici 7.29.0, piscina 5.2.0,
+  esbuild-wasm 0.28.1, webpack-dev-server 5.2.6,
+  http-proxy-middleware 3.0.7, shell-quote 1.10.0. Bumped **patch**
+  rather than "no bump" because `@angular/core` / `common` / `compiler`
+  are shipped runtime code, so the sanitization fixes are a user-visible
+  bug fix under the Versioning section; the `deps` no-bump carve-out is read as
+  covering dev/tooling dependencies. No source changes.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
