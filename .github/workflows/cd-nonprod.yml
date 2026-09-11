@@ -229,7 +229,7 @@ jobs:
           # `buildNumber`. Mirrors cd.yml's workflow_dispatch path.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         if: steps.pin.outputs.should_deploy == 'true'
         with:
           node-version: 24
