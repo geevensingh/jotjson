@@ -217,7 +217,7 @@ test('the real repo lockfile has every peer-locked family in lockstep', () => {
 
 test('PEER_LOCKED_FAMILIES covers every family the docs claim is asserted', () => {
   const names = PEER_LOCKED_FAMILIES.map((family) => family.name);
-  for (const expected of ['vitest', 'angular', 'material', 'playwright']) {
+  for (const expected of ['vitest', 'angular', 'angular-tooling', 'material', 'playwright']) {
     assert.ok(names.includes(expected), `missing peer-locked family '${expected}'`);
   }
 });
@@ -251,45 +251,53 @@ test('the playwright family is pinned in lockstep, guarding the CI Chromium vers
   assert.match(problems[0], /^playwright family: resolved versions diverge/);
 });
 
-// @angular-devkit/build-angular pins these at the family version and neither
-// is a root declaration, so a partial bump of one would otherwise slip past.
-test('the angular family asserts its same-version devkit followers', () => {
-  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular');
+// @angular-devkit/build-angular and @angular/cli pin these at the tooling
+// family version and none is a root declaration, so a partial bump of one
+// would otherwise slip past. @ngtools/webpack is the sharpest case: it
+// matches neither the `@angular/*` nor the `@angular-devkit/*` Dependabot
+// pattern, so no group claims it and this assertion is its only coverage.
+test('the angular-tooling family asserts its same-version followers', () => {
+  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular-tooling');
   assert.deepEqual([...family.followers].sort(), [
     '@angular-devkit/core',
     '@angular-devkit/schematics',
     '@angular/build',
+    '@ngtools/webpack',
     '@schematics/angular',
   ]);
 
   const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
-  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
-  lock.packages['node_modules/@angular/build'].version = '21.3.0';
-  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
-  assert.equal(problems.length, 1);
-  assert.match(problems[0], /@angular\/build@21\.3\.0/);
+  for (const name of ['@angular/build', '@ngtools/webpack']) {
+    const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+    lock.packages[`node_modules/${name}`].version = '21.3.0';
+    const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+    assert.equal(problems.length, 1, `${name} drift was not caught`);
+    assert.match(problems[0], /^angular-tooling family: resolved versions diverge/);
+  }
 });
 
 // @angular/cli exact-pins these two, and @schematics/angular exact-pins
 // devkit/schematics in turn -- neither is a root declaration, so a stale
 // copy would otherwise pass.
-test('the angular family covers the @angular/cli schematics closure', () => {
+test('the angular-tooling family covers the @angular/cli schematics closure', () => {
   const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
   for (const name of ['@angular-devkit/schematics', '@schematics/angular']) {
     const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
     lock.packages[`node_modules/${name}`].version = '21.3.0';
     const problems = checkPeerLockedFamilies(pkg, lock, 'root');
     assert.equal(problems.length, 1, `${name} drift was not caught`);
-    assert.match(problems[0], /^angular family: resolved versions diverge/);
+    assert.match(problems[0], /^angular-tooling family: resolved versions diverge/);
   }
 });
 
 // The 0.MMmm.pp devkit packages are exact-pinned but on a different
 // numbering, so they are deliberately excluded from a gate that asserts one
 // shared version per family. Pin that decision so it is not "fixed" by
-// adding them, which would fail on a correct lockfile.
-test('the angular family excludes the 0.x-mapped devkit packages', () => {
-  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular');
+// adding them, which would fail on a correct lockfile. They belong to the
+// TOOLING cohort (0.2102.23 maps to 21.2.23), which is the family that would
+// wrongly absorb them.
+test('the angular-tooling family excludes the 0.x-mapped devkit packages', () => {
+  const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular-tooling');
   for (const name of ['@angular-devkit/architect', '@angular-devkit/build-webpack']) {
     assert.ok(
       !family.followers.includes(name),
@@ -309,6 +317,75 @@ test('checkPeerLockedFamilies flags a partial Angular-family bump', () => {
   const problems = checkPeerLockedFamilies(pkg, lock, 'root');
   assert.equal(problems.length, 1);
   assert.match(problems[0], /^angular family: resolved versions diverge/);
+});
+
+// Every package in the angular-tooling cohort, declared + followers, so the
+// tests below can move the whole cohort as a unit.
+const ANGULAR_TOOLING_PACKAGES = [
+  '@angular/cli',
+  '@angular/ssr',
+  '@angular-devkit/build-angular',
+  '@angular-devkit/core',
+  '@angular-devkit/schematics',
+  '@angular/build',
+  '@ngtools/webpack',
+  '@schematics/angular',
+];
+
+// The thesis of the framework/tooling split (PR #552). Angular's two source
+// repos publish independently, so the cohorts routinely sit on different
+// patch versions and there is no shared version to "catch up" to -- the
+// single-family gate demanded @angular/core@21.2.23, which was never
+// published. Synthetic rather than relying on the committed lockfile still
+// being skewed: both repos will reconverge eventually, and this must not
+// quietly become a no-op when they do.
+test('cross-cohort patch skew is tolerated when the majors agree', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  for (const name of ANGULAR_TOOLING_PACKAGES) {
+    lock.packages[`node_modules/${name}`].version = '21.2.99';
+  }
+  assert.deepEqual(checkPeerLockedFamilies(pkg, lock, 'root'), []);
+});
+
+// ...but skew WITHIN a cohort still breaks, and this is the exact inverse of
+// the bug that produced #552. @angular/build and @angular-devkit/build-angular
+// both peer @angular/ssr at "^21.2.23", so an ssr left behind genuinely fails
+// to install. If ssr were mis-filed into the framework family this reports
+// "angular family" instead and the assertion misses.
+test('intra-cohort skew is still caught after the split', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  lock.packages['node_modules/@angular/ssr'].version = '21.2.22';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^angular-tooling family: resolved versions diverge/);
+});
+
+// Splitting the family buys patch independence, not major independence:
+// @angular/build peers @angular/core at "^21.0.0", so framework@21 +
+// tooling@22 cannot resolve. Without this assertion each family would be
+// internally uniform and Phase 1 would pass a lockfile that npm rejects.
+test('a major split between the two Angular cohorts is caught', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  for (const name of ANGULAR_TOOLING_PACKAGES) {
+    lock.packages[`node_modules/${name}`].version = '22.0.0';
+  }
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^angular-tooling family: major version 22 does not match/);
+});
+
+// A cohort that is already internally divergent reports that, and does not
+// also stack a major-mismatch diagnostic on the same root cause.
+test('major-agreement stays quiet while a cohort is internally divergent', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'));
+  lock.packages['node_modules/@angular/cli'].version = '22.0.0';
+  const problems = checkPeerLockedFamilies(pkg, lock, 'root');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^angular-tooling family: resolved versions diverge/);
 });
 
 // Registry provenance + digest strength (PR #534). A corporate npm proxy

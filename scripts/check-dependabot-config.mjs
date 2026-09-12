@@ -120,14 +120,25 @@ export const GENERIC_GROUP_NAMES = Object.freeze(['dev-minor', 'dev-security']);
  *   - 'is-mirror' -- this group IS the security counterpart of another.
  *
  * `kind` is one of:
- *   - 'peer-locked' -- members peer-depend at exact versions. Requires a
- *                      matching PEER_LOCKED_FAMILIES entry (detection half)
- *                      and exclusion from any generic group that could
- *                      otherwise claim a member.
+ *   - 'peer-locked' -- members are linked at a pinned version (exact peer,
+ *                      exact dep, or a rising caret floor), so a partial
+ *                      bump cannot install. Requires a `families` list
+ *                      naming the PEER_LOCKED_FAMILIES entry(s) this group
+ *                      covers (detection half), and exclusion from any
+ *                      generic group that could otherwise claim a member.
  *   - 'release-train' -- members ship together but resolve independently, so
  *                      a partial bump still installs. Grouped for review
  *                      ergonomics, not correctness.
  *   - 'generic'     -- a catch-all bucket, scoped by dependency-type.
+ *
+ * `families` is REQUIRED on every non-mirror 'peer-locked' group and lists
+ * the lockstep families it covers. Usually one, but a group covers several
+ * when the families must move together for a reason the per-family
+ * assertion cannot express -- `angular` covers `angular` + `angular-tooling`
+ * because the two cohorts release separately yet share a major. The list is
+ * explicit rather than inferred from the group name: with an inferred
+ * mapping, deleting one of two co-grouped families still resolves via the
+ * survivor and the loss is silent.
  *
  * Adding a group without an entry here fails the gate. Naming the specific
  * mechanism is the forcing function (cf. knip.jsonc, OVERRIDE_POLICY).
@@ -138,8 +149,16 @@ export const GROUP_POLICY = {
       kind: 'peer-locked',
       security: 'mirrored',
       mirror: 'angular-security',
+      // ONE group, TWO lockstep families. Angular ships from two repos on
+      // independent cadences (angular/angular and angular/angular-cli), so
+      // their patch streams legitimately diverge -- see PR #552, where the
+      // CLI reached 21.2.23 and the framework's 21.x line ended at 21.2.22.
+      // They stay in a single group because the cohorts are still coupled at
+      // the MAJOR boundary (`@angular/build` peers `@angular/core: ^21.0.0`),
+      // so a major must land as one PR or neither half installs.
+      families: ['angular', 'angular-tooling'],
       rationale:
-        'Angular runtime + devkit peer-lock at exact versions, so a partial bump cannot install. The version group is the only vehicle that delivers a mergeable lockstep bump.',
+        'Angular framework and CLI/devkit each peer-lock internally at pinned versions, so a partial bump within either cohort cannot install. The two cohorts release separately and may differ at patch level, but are coupled at the major boundary -- hence one group covering two families.',
     },
     'angular-security': {
       kind: 'peer-locked',
@@ -152,6 +171,7 @@ export const GROUP_POLICY = {
       kind: 'peer-locked',
       security: 'mirrored',
       mirror: 'material-security',
+      families: ['material'],
       rationale:
         '@angular/material peers @angular/cdk at an exact version. Separate release cadence from the Angular runtime, hence a separate group. Production-typed, so the dev-* generic buckets cannot claim it and no exclusion is required.',
     },
@@ -165,12 +185,14 @@ export const GROUP_POLICY = {
     vitest: {
       kind: 'peer-locked',
       security: 'inert',
+      families: ['vitest'],
       rationale:
         'A vitest-security group would never fire. The vulnerable member (@vitest/browser, #533) is transitive and pinned exactly by its parent, so the security updater cannot open a standalone PR for it; remediation can only ride a version update. Recorded rather than satisfied with an empty group.',
     },
     playwright: {
       kind: 'peer-locked',
       security: 'inert',
+      families: ['playwright'],
       rationale:
         'Same shape as vitest: @playwright/test depends on playwright at an exact version, which pins playwright-core exactly. An alerted child cannot be remediated standalone by the security updater.',
     },
@@ -770,13 +792,53 @@ export function checkFamilyExclusions(
  * The two halves cover different inbound paths -- the group is *prevention*
  * (it shapes what Dependabot proposes), the lockstep assertion is *detection*
  * (it catches a partial bump from any source). Both must describe the same
- * family or the pair silently stops composing. Mirrors the
+ * families or the pair silently stops composing. Mirrors the
  * OVERRIDE_POLICY <-> VENDORED_PACKAGES cross-check.
+ *
+ * The mapping is one group -> N families, and it is declared HERE rather
+ * than on the family. `check-lockfile.mjs` is imported by this module and
+ * never the reverse; it knows nothing about Dependabot and must not start
+ * carrying group names. A `families: [...]` list on the group keeps the
+ * prevention-layer vocabulary in the prevention-layer module.
+ *
+ * The list is REQUIRED on every non-mirror peer-locked group, never
+ * inferred from the group name. An inferred mapping is how a family can go
+ * silently unasserted: if one of two families sharing a group is deleted,
+ * a name-based lookup still resolves via the survivor and the gate stays
+ * green. Same class of defect as the invisible `applies-to` default in
+ * assertion A (#506).
  */
-export function checkPeerLockedFamilySync(updates, families = PEER_LOCKED_FAMILIES) {
+export function checkPeerLockedFamilySync(
+  updates,
+  families = PEER_LOCKED_FAMILIES,
+  policy = GROUP_POLICY,
+) {
   const problems = [];
   const workspaceToKey = { root: 'npm:/', api: 'npm:/api' };
 
+  // group -> families, inverted to families -> group, so each direction can
+  // assert the mapping is total rather than merely non-empty.
+  const claimedBy = new Map();
+  for (const [key, entries] of Object.entries(policy)) {
+    for (const [groupName, entry] of Object.entries(entries)) {
+      if (entry.kind !== 'peer-locked') continue;
+      if (entry.security === 'is-mirror') continue;
+      for (const familyName of entry.families ?? []) {
+        const existing = claimedBy.get(`${key}\u0000${familyName}`);
+        if (existing) {
+          problems.push(
+            `${key}: family '${familyName}' is claimed by more than one group ` +
+              `('${existing}' and '${groupName}'). A family belongs to exactly one group.`,
+          );
+          continue;
+        }
+        claimedBy.set(`${key}\u0000${familyName}`, groupName);
+      }
+    }
+  }
+
+  // Forward: every declared family is claimed by a group, and that group
+  // actually exists in dependabot.yml.
   for (const family of families) {
     const key = workspaceToKey[family.workspace];
     if (!key) {
@@ -794,21 +856,33 @@ export function checkPeerLockedFamilySync(updates, families = PEER_LOCKED_FAMILI
       );
       continue;
     }
-    if (!(update.groups ?? {})[family.name]) {
+    const groupName = claimedBy.get(`${key}\u0000${family.name}`);
+    if (!groupName) {
       problems.push(
         `${key}: PEER_LOCKED_FAMILIES declares family '${family.name}' in\n` +
-          `    scripts/check-lockfile.mjs, but no group of that name exists here.\n` +
-          `    docs/supply-chain.md requires all three of: a family group, a generic-group\n` +
-          `    exclusion, and a PEER_LOCKED_FAMILIES assertion. Prevention and detection must\n` +
-          `    describe the same family.`,
+          `    scripts/check-lockfile.mjs, but no GROUP_POLICY group lists it in \`families\`.\n` +
+          `    Every peer-locked family must be covered by exactly one Dependabot group so\n` +
+          `    prevention and detection describe the same set. Add it to the covering group's\n` +
+          `    \`families\` list (one group may cover several families when an inter-family\n` +
+          `    constraint requires them to move together).`,
+      );
+      continue;
+    }
+    if (!(update.groups ?? {})[groupName]) {
+      problems.push(
+        `${key}: GROUP_POLICY maps family '${family.name}' to group '${groupName}',\n` +
+          `    but no group of that name exists in .github/dependabot.yml.`,
       );
     }
   }
 
+  // Reverse: every peer-locked group names the families it covers, and each
+  // named family actually exists. This is what makes deleting one of two
+  // co-grouped families loud instead of silent.
   const familyNames = new Set(families.map((family) => family.name));
   for (const update of updates) {
     const key = ecosystemKey(update);
-    const entries = GROUP_POLICY[key] ?? {};
+    const entries = policy[key] ?? {};
     for (const [name, entry] of Object.entries(entries)) {
       // Only peer-locked families need the detection half. A release-train
       // group resolves fine after a partial bump, so a lockstep assertion
@@ -816,13 +890,26 @@ export function checkPeerLockedFamilySync(updates, families = PEER_LOCKED_FAMILI
       if (entry.kind !== 'peer-locked') continue;
       if (entry.security === 'is-mirror') continue;
       if (!(update.groups ?? {})[name]) continue;
-      if (familyNames.has(name)) continue;
-      problems.push(
-        `${key}: group '${name}' is classified kind 'peer-locked' but has no\n` +
-          `    PEER_LOCKED_FAMILIES entry in scripts/check-lockfile.mjs. Add the lockstep\n` +
-          `    assertion (the detection half), or reclassify the group's kind if its members\n` +
-          `    do not actually peer-lock at exact versions.`,
-      );
+
+      const declared = entry.families ?? [];
+      if (declared.length === 0) {
+        problems.push(
+          `${key}: group '${name}' is classified kind 'peer-locked' but its GROUP_POLICY\n` +
+            `    entry has no \`families\` list. Name the PEER_LOCKED_FAMILIES entry(s) it\n` +
+            `    covers, or reclassify the group's kind if its members do not actually lock\n` +
+            `    at pinned versions.`,
+        );
+        continue;
+      }
+      for (const familyName of declared) {
+        if (familyNames.has(familyName)) continue;
+        problems.push(
+          `${key}: group '${name}' lists family '${familyName}' in \`families\`, but no\n` +
+            `    such entry exists in PEER_LOCKED_FAMILIES (scripts/check-lockfile.mjs).\n` +
+            `    Add the lockstep assertion (the detection half), or drop the name here if\n` +
+            `    the family was intentionally removed.`,
+        );
+      }
     }
   }
 
