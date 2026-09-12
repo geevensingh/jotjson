@@ -13,10 +13,12 @@ import {
   checkPeerLockedFamilySync,
   DEPENDABOT_CONFIG,
   ecosystemKey,
+  GROUP_POLICY,
   isPatternExcluded,
   parseConfig,
   wildcardMatch,
 } from './check-dependabot-config.mjs';
+import { PEER_LOCKED_FAMILIES } from './check-lockfile.mjs';
 
 /** Minimal `updates` entry; tests override only what they exercise. */
 function update(overrides = {}) {
@@ -531,12 +533,76 @@ test('isPatternExcluded handles literal and glob coverage', () => {
 // E3: PEER_LOCKED_FAMILIES cross-check
 // ---------------------------------------------------------------------------
 
-test('checkPeerLockedFamilySync flags a declared family with no matching group', () => {
+test('checkPeerLockedFamilySync flags a family no group claims', () => {
   const problems = checkPeerLockedFamilySync(
     [update({ groups: { angular: group({ patterns: ['@angular/*'] }) } })],
-    [{ name: 'vitest', workspace: 'root', declared: ['vitest'] }],
+    [{ name: 'orphan', workspace: 'root', declared: ['orphan'] }],
+    { 'npm:/': { angular: { kind: 'peer-locked', families: ['angular'] } } },
   );
-  assert.ok(problems.some((problem) => /no group of that name exists here/.test(problem)));
+  assert.ok(problems.some((problem) => /no GROUP_POLICY group lists it in/.test(problem)));
+});
+
+test('checkPeerLockedFamilySync flags a policy group missing from dependabot.yml', () => {
+  const problems = checkPeerLockedFamilySync(
+    [update({ groups: {} })],
+    [{ name: 'vitest', workspace: 'root', declared: ['vitest'] }],
+    { 'npm:/': { vitest: { kind: 'peer-locked', families: ['vitest'] } } },
+  );
+  assert.ok(problems.some((problem) => /no group of that name exists in/.test(problem)));
+});
+
+test('checkPeerLockedFamilySync flags a peer-locked group with no families list', () => {
+  const problems = checkPeerLockedFamilySync(
+    [update({ groups: { angular: group({ patterns: ['@angular/*'] }) } })],
+    [],
+    { 'npm:/': { angular: { kind: 'peer-locked' } } },
+  );
+  assert.ok(problems.some((problem) => /has no `families` list/.test(problem)));
+});
+
+test('checkPeerLockedFamilySync flags a group naming a family that does not exist', () => {
+  const problems = checkPeerLockedFamilySync(
+    [update({ groups: { angular: group({ patterns: ['@angular/*'] }) } })],
+    [{ name: 'angular', workspace: 'root', declared: ['@angular/core'] }],
+    { 'npm:/': { angular: { kind: 'peer-locked', families: ['angular', 'angular-tooling'] } } },
+  );
+  assert.ok(problems.some((problem) => /no\n {4}such entry exists/.test(problem)));
+});
+
+// The regression that motivated making `families` explicit rather than
+// inferring the group from the family name. With an inferred mapping, the
+// surviving co-grouped family still satisfies the group -> family direction,
+// so deleting its sibling is silent and ten packages lose their assertion.
+test('deleting one of two co-grouped families is loud, not silent', () => {
+  const policy = {
+    'npm:/': { angular: { kind: 'peer-locked', families: ['angular', 'angular-tooling'] } },
+  };
+  const updates = [update({ groups: { angular: group({ patterns: ['@angular/*'] }) } })];
+
+  const both = [
+    { name: 'angular', workspace: 'root', declared: ['@angular/core'] },
+    { name: 'angular-tooling', workspace: 'root', declared: ['@angular/cli'] },
+  ];
+  assert.deepEqual(checkPeerLockedFamilySync(updates, both, policy), []);
+
+  const survivorOnly = both.filter((family) => family.name !== 'angular');
+  const problems = checkPeerLockedFamilySync(updates, survivorOnly, policy);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /lists family 'angular' in/);
+});
+
+test('checkPeerLockedFamilySync flags a family claimed by two groups', () => {
+  const problems = checkPeerLockedFamilySync(
+    [update({ groups: { angular: group({ patterns: ['@angular/*'] }) } })],
+    [{ name: 'angular', workspace: 'root', declared: ['@angular/core'] }],
+    {
+      'npm:/': {
+        angular: { kind: 'peer-locked', families: ['angular'] },
+        other: { kind: 'peer-locked', families: ['angular'] },
+      },
+    },
+  );
+  assert.ok(problems.some((problem) => /claimed by more than one group/.test(problem)));
 });
 
 test('checkPeerLockedFamilySync flags an unknown workspace', () => {
@@ -546,6 +612,19 @@ test('checkPeerLockedFamilySync flags an unknown workspace', () => {
   );
   assert.equal(problems.length, 1);
   assert.match(problems[0], /unknown workspace/);
+});
+
+// Prevention and detection must describe the same set. The committed config
+// is the live proof that the angular group covers both Angular cohorts.
+test('the angular group covers both Angular cohorts', () => {
+  assert.deepEqual(GROUP_POLICY['npm:/'].angular.families, ['angular', 'angular-tooling']);
+  const families = PEER_LOCKED_FAMILIES.filter((family) =>
+    GROUP_POLICY['npm:/'].angular.families.includes(family.name),
+  );
+  assert.equal(families.length, 2);
+  // The tooling cohort tracks the framework's major but not its patch.
+  const tooling = families.find((family) => family.name === 'angular-tooling');
+  assert.equal(tooling.sharesMajorWith, 'angular');
 });
 
 // ---------------------------------------------------------------------------

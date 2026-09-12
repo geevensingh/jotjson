@@ -1286,9 +1286,13 @@ enforcement and the field together in the same PR, or not at all.
   group registry is additionally cross-checked in both directions against
   `PEER_LOCKED_FAMILIES` in `scripts/check-lockfile.mjs`, so prevention
   (the group) and detection (the lockstep assertion) cannot describe
-  different families. Note the structural ceiling: the gate validates the
-  config file, not GitHub's behavior. See `docs/supply-chain.md` ->
-  "Grouped security updates" (issues #506, #536).
+  different sets. The mapping is one group to N families, declared
+  explicitly in each peer-locked group's `families: [...]` list rather
+  than inferred from the group name -- an inferred mapping lets one of
+  two co-grouped families be deleted silently. Note the structural
+  ceiling: the gate validates the config file, not GitHub's behavior. See
+  `docs/supply-chain.md` -> "Grouped security updates" (issues #506,
+  #536) and "One group, two families" (#552).
 
 ### Scalability
 - Cosmos DB serverless scales automatically.
