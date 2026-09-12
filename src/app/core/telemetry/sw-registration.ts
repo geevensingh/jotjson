@@ -48,13 +48,7 @@ export interface BrowserBucket {
 }
 
 export type SwRegisterFailReason =
-  | 'security'
-  | 'syntax'
-  | 'fetch'
-  | 'type'
-  | 'network'
-  | 'abort'
-  | 'other';
+  'security' | 'syntax' | 'fetch' | 'type' | 'network' | 'abort' | 'other';
 
 export type SwEvent =
   | { name: 'sw.registered'; props: BuildIdentity; timestamp: number }

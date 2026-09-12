@@ -9,13 +9,7 @@
  */
 
 export type JsonValueType =
-  | 'object'
-  | 'array'
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'null'
-  | 'undefined';
+  'object' | 'array' | 'string' | 'number' | 'boolean' | 'null' | 'undefined';
 
 export function jsonTypeOf(value: unknown): JsonValueType {
   if (value === null) return 'null';

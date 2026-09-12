@@ -118,8 +118,7 @@ async function performSetValuePaste(page: Page, json: string): Promise<void> {
       window as unknown as { monaco?: { editor?: { getEditors?: () => unknown[] } } }
     ).monaco;
     const editors = monacoApi?.editor?.getEditors?.() as
-      | { setValue: (value: string) => void }[]
-      | undefined;
+      { setValue: (value: string) => void }[] | undefined;
     if (editors && editors[0]) {
       editors[0].setValue(text);
     } else {
