@@ -38,9 +38,7 @@ export interface DecodedValueDialogData {
 }
 
 export type DecodedValueDialogResult =
-  | { readonly kind: 'extract' }
-  | { readonly kind: 'applyDecoded' }
-  | undefined;
+  { readonly kind: 'extract' } | { readonly kind: 'applyDecoded' } | undefined;
 
 interface DecodedLine {
   readonly index: number;
