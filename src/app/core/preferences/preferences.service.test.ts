@@ -740,33 +740,31 @@ describe('PreferencesService', () => {
 
     it('does not emit when matchMedia recomputes the system theme', () => {
       const systemThemeChangeListeners: Array<() => void> = [];
-      vi.spyOn(window, 'matchMedia').mockImplementation(
-        (query: string): MediaQueryList => ({
-          matches: true,
-          media: query,
-          onchange: null,
-          addEventListener: (
-            type: string,
-            listener: EventListenerOrEventListenerObject | null,
-          ): void => {
-            if (type !== 'change' || listener === null) {
-              return;
+      vi.spyOn(window, 'matchMedia').mockImplementation((query: string): MediaQueryList => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: (
+          type: string,
+          listener: EventListenerOrEventListenerObject | null,
+        ): void => {
+          if (type !== 'change' || listener === null) {
+            return;
+          }
+          systemThemeChangeListeners.push((): void => {
+            const event = new Event('change');
+            if (typeof listener === 'function') {
+              listener(event);
+            } else {
+              listener.handleEvent(event);
             }
-            systemThemeChangeListeners.push((): void => {
-              const event = new Event('change');
-              if (typeof listener === 'function') {
-                listener(event);
-              } else {
-                listener.handleEvent(event);
-              }
-            });
-          },
-          removeEventListener: (): void => undefined,
-          dispatchEvent: (): boolean => true,
-          addListener: (): void => undefined,
-          removeListener: (): void => undefined,
-        }),
-      );
+          });
+        },
+        removeEventListener: (): void => undefined,
+        dispatchEvent: (): boolean => true,
+        addListener: (): void => undefined,
+        removeListener: (): void => undefined,
+      }));
       const svc = TestBed.inject(PreferencesService);
       logger.event.mockClear();
 
@@ -817,8 +815,9 @@ describe('PreferencesService', () => {
     } {
       let prefersLight = initialPrefersLight;
       const changeListeners: Array<EventListenerOrEventListenerObject> = [];
-      const matchMediaSpy = vi.spyOn(window, 'matchMedia').mockImplementation(
-        (query: string): MediaQueryList => ({
+      const matchMediaSpy = vi
+        .spyOn(window, 'matchMedia')
+        .mockImplementation((query: string): MediaQueryList => ({
           get matches(): boolean {
             // Only the `(prefers-color-scheme: light)` query is
             // meaningful for this test; default everything else to false.
@@ -838,8 +837,7 @@ describe('PreferencesService', () => {
           dispatchEvent: (): boolean => true,
           addListener: (): void => undefined,
           removeListener: (): void => undefined,
-        }),
-      );
+        }));
       return {
         fireChange: (): void => {
           prefersLight = !prefersLight;
@@ -940,25 +938,23 @@ describe('PreferencesService', () => {
       // effective is still dark, dedupe skips the emit.
       let prefersLight = false;
       const changeListeners: Array<EventListenerOrEventListenerObject> = [];
-      vi.spyOn(window, 'matchMedia').mockImplementation(
-        (query: string): MediaQueryList => ({
-          get matches(): boolean {
-            return query.includes('light') ? prefersLight : false;
-          },
-          media: query,
-          onchange: null,
-          addEventListener: (
-            type: string,
-            listener: EventListenerOrEventListenerObject | null,
-          ): void => {
-            if (type === 'change' && listener !== null) changeListeners.push(listener);
-          },
-          removeEventListener: (): void => undefined,
-          dispatchEvent: (): boolean => true,
-          addListener: (): void => undefined,
-          removeListener: (): void => undefined,
-        }),
-      );
+      vi.spyOn(window, 'matchMedia').mockImplementation((query: string): MediaQueryList => ({
+        get matches(): boolean {
+          return query.includes('light') ? prefersLight : false;
+        },
+        media: query,
+        onchange: null,
+        addEventListener: (
+          type: string,
+          listener: EventListenerOrEventListenerObject | null,
+        ): void => {
+          if (type === 'change' && listener !== null) changeListeners.push(listener);
+        },
+        removeEventListener: (): void => undefined,
+        dispatchEvent: (): boolean => true,
+        addListener: (): void => undefined,
+        removeListener: (): void => undefined,
+      }));
       TestBed.inject(PreferencesService);
       logger.event.mockClear();
 
