@@ -106,7 +106,7 @@
     "@angular/localize": "^21.2.22",
     "@axe-core/playwright": "^4.13.0",
     "@azure/cosmos": "^4.10.0",
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.3",
     "@vitest/browser-playwright": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.11",
