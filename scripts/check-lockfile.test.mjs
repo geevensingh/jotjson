@@ -256,6 +256,10 @@ test('the playwright family is pinned in lockstep, guarding the CI Chromium vers
 // would otherwise slip past. @ngtools/webpack is the sharpest case: it
 // matches neither the `@angular/*` nor the `@angular-devkit/*` Dependabot
 // pattern, so no group claims it and this assertion is its only coverage.
+// That split is deliberate, not an oversight: an exact-pinned transitive
+// is not proposable by either Dependabot path, so prevention cannot reach
+// it. See GROUP_POLICY['npm:/'].angular in check-dependabot-config.mjs and
+// docs/supply-chain.md -> "What 'coverage' means on each side".
 test('the angular-tooling family asserts its same-version followers', () => {
   const family = PEER_LOCKED_FAMILIES.find((entry) => entry.name === 'angular-tooling');
   assert.deepEqual([...family.followers].sort(), [

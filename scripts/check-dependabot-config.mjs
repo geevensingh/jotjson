@@ -157,8 +157,23 @@ export const GROUP_POLICY = {
       // the MAJOR boundary (`@angular/build` peers `@angular/core: ^21.0.0`),
       // so a major must land as one PR or neither half installs.
       families: ['angular', 'angular-tooling'],
+      // KNOWN, DELIBERATE: `@ngtools/webpack` and `@schematics/angular`
+      // are asserted by the angular-tooling family but matched by neither
+      // pattern here. That is not an oversight. Both are exact-pinned by a
+      // declared member, so Dependabot can propose no standalone update for
+      // either -- the version path has no candidate and the security updater
+      // cannot remediate an exact-pinned transitive (the #533 finding). The
+      // lockstep assertion is their only coverage, and is sufficient.
+      //
+      // Adding literal patterns would be actively harmful without a paired
+      // `ignore` entry: both sit on the mainline 21.2.x numbering, neither is
+      // major-ignored, and this group carries no `update-types` filter, so a
+      // proposable 22.x member would produce an unmergeable group PR that
+      // makes Dependabot skip the group by name and starve the 21.2.x patch
+      // train. See docs/supply-chain.md -> "What 'coverage' means on each
+      // side" and #557.
       rationale:
-        'Angular framework and CLI/devkit each peer-lock internally at pinned versions, so a partial bump within either cohort cannot install. The two cohorts release separately and may differ at patch level, but are coupled at the major boundary -- hence one group covering two families.',
+        'Angular framework and CLI/devkit each peer-lock internally at pinned versions, so a partial bump within either cohort cannot install. The two cohorts release separately and may differ at patch level, but are coupled at the major boundary -- hence one group covering two families. Group coverage is scoped to proposable members; exact-pinned transitives are detection-only (see the note above).',
     },
     'angular-security': {
       kind: 'peer-locked',

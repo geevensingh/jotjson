@@ -137,12 +137,13 @@ transitive that appears nowhere in `package.json`.
 Any root family whose members are linked at a pinned version gets all
 three of:
 
-1. **Coverage by a Dependabot group** in `.github/dependabot.yml`,
-   spanning the closure, with a comment naming the constraint. Usually a
-   group of its own; one group may cover **several** families when an
-   inter-family constraint requires them to move together (see the
-   Angular split below). The group's `GROUP_POLICY` entry names the
-   families it covers in an explicit `families: [...]` list.
+1. **Coverage by a Dependabot group** in `.github/dependabot.yml`, over
+   the members Dependabot can actually propose, with a comment naming
+   the constraint. Usually a group of its own; one group may cover
+   **several** families when an inter-family constraint requires them to
+   move together (see the Angular split below). The group's
+   `GROUP_POLICY` entry names the families it covers in an explicit
+   `families: [...]` list.
 2. **An exclude in `dev-minor`** (or whatever generic group would
    otherwise capture it), so members always route to the family group.
 3. **A lockstep assertion** in `PEER_LOCKED_FAMILIES` in
@@ -153,6 +154,40 @@ All three are required because they cover different inbound paths. The
 group is *prevention* and only governs Dependabot's **version-update**
 output; the `check-lockfile.mjs` assertion is *detection* and covers a
 security-update PR, a human, or an agent session equally.
+
+### What "coverage" means on each side (#552)
+
+The two halves range over **different sets**, and conflating them is a
+live source of confusion -- it produced a review comment on PR #552.
+
+- A **group** ranges over what Dependabot can propose. Aim it at the
+  closure, but understand that it only bites where a standalone proposal
+  is possible. For a transitive whose parent pins it **exactly**, that is
+  currently nothing: the version path proposes no standalone candidate,
+  and the security updater cannot remediate it at all -- which is exactly
+  why #533 reports no PR was ever opened for `@vitest/browser`.
+- The **lockstep assertion** ranges over the lockfile closure, including
+  manifest-invisible transitives. For an exact-pinned transitive it is
+  the *only* coverage, and that is by design, not an oversight.
+
+So neither set contains the other. `@ngtools/webpack` and
+`@schematics/angular` are asserted but unmatched by the `angular` group's
+patterns; `@angular-devkit/architect` and `@angular-devkit/build-webpack`
+are the mirror image -- matched by `@angular-devkit/*` but deliberately
+held out of `followers` because of the `0.MMmm.pp` numbering. No single
+assertion can make both directions total, which is why the rule above
+scopes group coverage to what is proposable rather than to the closure.
+
+**Do not "fix" an unmatched exact-pinned transitive by adding a literal
+pattern on its own.** Adding one is not free: `@ngtools/webpack` and
+`@schematics/angular` are on the mainline `21.2.x` numbering but are
+matched by **no** `ignore` entry, and the `angular` group carries no
+`update-types` filter. The moment such a package became proposable, the
+group would offer a 22.x member against a 21.2.x tree -- an unmergeable
+group PR that makes Dependabot skip the group by name and starves the
+21.2.x patch train, the precise failure the `ignore` block exists to
+prevent. A pattern addition therefore requires a matching `ignore` +
+`IGNORE_POLICY` entry in the same change. Tracked in #557.
 
 Three edge kinds qualify a family: an **exact peer**, an **exact dep**,
 or a **rising caret floor** (`^21.2.23`). The floor is one-directional,
