@@ -643,16 +643,31 @@ for the iteration loop.
   be classified and justified in `scripts/check-dependency-overrides.mjs`;
   see `docs/supply-chain.md` and issue #514.
 - **Peer-locked dependency families move in lockstep.** Some packages
-  peer-depend on each other at an *exact* version (Angular runtime +
-  devkit; the Vitest toolchain), so no partial bump can resolve. Each
-  such family needs its own Dependabot group, an exclude from the
-  generic `dev-minor` group, and an entry in `PEER_LOCKED_FAMILIES` in
-  `scripts/check-lockfile.mjs`. The group is prevention and covers only
-  Dependabot's version-update path; the `check-lockfile.mjs` assertion
-  is detection and covers every inbound path. This matters most when the
-  vulnerable member is a *transitive* that appears nowhere in
-  `package.json` -- see `docs/supply-chain.md` -> "Peer-locked
-  dependency families" and issue #533.
+  are linked at a *pinned* version -- an exact peer, an exact dep, or a
+  rising caret floor (the Vitest toolchain; each Angular cohort) -- so no
+  partial bump can resolve. Each such family needs coverage by a
+  Dependabot group, an exclude from the generic `dev-minor` group, and an
+  entry in `PEER_LOCKED_FAMILIES` in `scripts/check-lockfile.mjs`. The
+  group is prevention and covers only Dependabot's version-update path;
+  the `check-lockfile.mjs` assertion is detection and covers every
+  inbound path. This matters most when the vulnerable member is a
+  *transitive* that appears nowhere in `package.json` -- see
+  `docs/supply-chain.md` -> "Peer-locked dependency families" and issue
+  #533.
+- **A family is one release cadence, not one ecosystem.** One Dependabot
+  group may cover *several* families when an inter-family constraint
+  requires them to move together. Angular is the worked example: the
+  framework (`angular/angular`) and the CLI/devkit
+  (`angular/angular-cli`) publish independently and routinely sit on
+  different patch versions, so they are two families -- but they peer
+  each other at `^MAJOR.0.0`, so they stay in one group and
+  `angular-tooling` declares `sharesMajorWith: 'angular'`. Asserting one
+  shared version across both deadlocked PR #552 by demanding an
+  `@angular/core` patch that was never published. The covering group
+  names its families explicitly in `GROUP_POLICY.families`; never infer
+  the mapping from the group name, or deleting one of two co-grouped
+  families goes silent. See `docs/supply-chain.md` -> "One group, two
+  families".
 - **Dependabot groups do not apply to security updates unless you say
   so.** `groups.*.applies-to` defaults to `version-updates`, and that
   invisible default is issue #506: the `angular` group's comment claimed

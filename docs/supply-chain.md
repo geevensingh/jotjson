@@ -110,9 +110,10 @@ version.
 
 ## Peer-locked dependency families
 
-Some packages peer-depend on each other at an **exact** version, so no
-partial bump can resolve -- npm `ERESOLVE`s on install. The Angular
-runtime + devkit are one such family; the Vitest toolchain is another:
+Some packages are linked at a pinned version, so no partial bump can
+resolve -- npm `ERESOLVE`s on install. The Vitest toolchain is the
+canonical example; the two Angular cohorts are another (see the split
+below):
 
 ```
 @vitest/browser-playwright@X
@@ -133,11 +134,16 @@ transitive that appears nowhere in `package.json`.
 
 ### The rule
 
-Any root family whose members peer-depend on each other with exact pins
-gets all three of:
+Any root family whose members are linked at a pinned version gets all
+three of:
 
-1. **Its own Dependabot group** in `.github/dependabot.yml`, covering
-   the peer closure, with a comment naming the constraint.
+1. **Coverage by a Dependabot group** in `.github/dependabot.yml`, over
+   the members Dependabot can actually propose, with a comment naming
+   the constraint. Usually a group of its own; one group may cover
+   **several** families when an inter-family constraint requires them to
+   move together (see the Angular split below). The group's
+   `GROUP_POLICY` entry names the families it covers in an explicit
+   `families: [...]` list.
 2. **An exclude in `dev-minor`** (or whatever generic group would
    otherwise capture it), so members always route to the family group.
 3. **A lockstep assertion** in `PEER_LOCKED_FAMILIES` in
@@ -148,6 +154,100 @@ All three are required because they cover different inbound paths. The
 group is *prevention* and only governs Dependabot's **version-update**
 output; the `check-lockfile.mjs` assertion is *detection* and covers a
 security-update PR, a human, or an agent session equally.
+
+### What "coverage" means on each side (#552)
+
+The two halves range over **different sets**, and conflating them is a
+live source of confusion -- it produced a review comment on PR #552.
+
+- A **group** ranges over what Dependabot can propose. Aim it at the
+  closure, but understand that it only bites where a standalone proposal
+  is possible. For a transitive whose parent pins it **exactly**, that is
+  currently nothing: the version path proposes no standalone candidate,
+  and the security updater cannot remediate it at all -- which is exactly
+  why #533 reports no PR was ever opened for `@vitest/browser`.
+- The **lockstep assertion** ranges over the lockfile closure, including
+  manifest-invisible transitives. For an exact-pinned transitive it is
+  the *only* coverage, and that is by design, not an oversight.
+
+So neither set contains the other. `@ngtools/webpack` and
+`@schematics/angular` are asserted but unmatched by the `angular` group's
+patterns; `@angular-devkit/architect` and `@angular-devkit/build-webpack`
+are the mirror image -- matched by `@angular-devkit/*` but deliberately
+held out of `followers` because of the `0.MMmm.pp` numbering. No single
+assertion can make both directions total, which is why the rule above
+scopes group coverage to what is proposable rather than to the closure.
+
+**Do not "fix" an unmatched exact-pinned transitive by adding a literal
+pattern on its own.** Adding one is not free: `@ngtools/webpack` and
+`@schematics/angular` are on the mainline `21.2.x` numbering but are
+matched by **no** `ignore` entry, and the `angular` group carries no
+`update-types` filter. The moment such a package became proposable, the
+group would offer a 22.x member against a 21.2.x tree -- an unmergeable
+group PR that makes Dependabot skip the group by name and starves the
+21.2.x patch train, the precise failure the `ignore` block exists to
+prevent. A pattern addition therefore requires a matching `ignore` +
+`IGNORE_POLICY` entry in the same change. Tracked in #557.
+
+Three edge kinds qualify a family: an **exact peer**, an **exact dep**,
+or a **rising caret floor** (`^21.2.23`). The floor is one-directional,
+but it rises with every release, so members still cannot skew downward
+independently.
+
+`families: [...]` is required on every non-mirror peer-locked group and
+is never inferred from the group name. With an inferred mapping, deleting
+one of two co-grouped families still satisfies the group -> family
+direction via the survivor, and the loss is silent -- the same class of
+defect as the invisible `applies-to` default in #506.
+
+### One group, two families: Angular (PR #552)
+
+A family is **one release cadence**, not one ecosystem. Angular ships
+from two repos that share a version *number* by convention only:
+
+```
+angular/angular      -> core, common, compiler, compiler-cli, router,
+                        forms, localize, platform-*, animations
+angular/angular-cli  -> cli, ssr, build, @angular-devkit/*,
+                        @schematics/angular, @ngtools/webpack
+```
+
+Their patch streams diverge routinely. In PR #552 the CLI published
+`21.2.23` while the framework's 21.x line ended at `21.2.22` -- and a
+single `angular` family asserting one shared version demanded
+`@angular/core@21.2.23`, which does not exist. The PR was unmergeable by
+any action Dependabot could take. `npm ci` resolved that lockfile
+perfectly well, because the cross-cohort edges are caret-at-major:
+
+```
+@angular/build@21.2.23  peerDependencies:  @angular/core  "^21.0.0"
+```
+
+Intra-cohort edges are what actually lock, and all three kinds appear:
+
+```
+@angular/router -> @angular/core        "21.2.22"   exact peer
+@angular/cli    -> @angular-devkit/core "21.2.23"   exact dep
+@angular/build  -> @angular/ssr        "^21.2.23"   caret floor
+```
+
+So the cohorts are **two families** (patch-independent) in **one
+Dependabot group** (because `^21.0.0` still couples them at the major
+boundary -- a framework-only v22 PR would leave the tooling half unable
+to resolve). `angular-tooling` declares `sharesMajorWith: 'angular'`, and
+`check-lockfile.mjs` asserts the majors match, so the major hinge keeps a
+*detection* half rather than relying on the group alone.
+
+That major coupling is currently inert on the version path: the `ignore`
+block drops semver-major for `@angular/*` while #550 is open. It becomes
+load-bearing the moment those ignores lift, which is exactly when
+splitting the group would break. **Do not split the `angular` group when
+closing #550.**
+
+This boundary is **observed, not guaranteed**. angular-cli demonstrably
+does emit patch-floored peer ranges (the `@angular/ssr` edge above). If a
+*cross-cohort* edge ever gains a patch floor, the two families must merge
+again. Re-verify on any Angular minor.
 
 ### Why (issue #533)
 
@@ -367,7 +467,13 @@ the version-path escape hatch is suppressed. #550 bounds this.
    Take the highest, then use the newest published patch at or above it.
 3. **Do the lockstep bump by hand**, moving every declared member of the
    family in `PEER_LOCKED_FAMILIES` together -- not just the alerted
-   ones. `npm run lint:lockfile` asserts you did.
+   ones. `npm run lint:lockfile` asserts you did. Note the unit of fix is
+   the **family**, not the group: `angular-security` alerts arrive under
+   one group name but span two families (`angular` and
+   `angular-tooling`), which move on separate patch streams. Bump each
+   affected family to its own newest patch; do **not** try to force both
+   cohorts onto a single shared version, which is the mistake #552
+   documents. Step 2's floor must likewise be computed per family.
 4. **Never** reach for `--legacy-peer-deps` or `--force` to make a
    partial bump install (AGENTS.md Section 2 and Section 7 #12).
 5. **Close the alarm PR** once the lockstep bump lands -- but check
