@@ -442,8 +442,18 @@ export function printMetadataMessage(workspace, offenders) {
 }
 
 /**
- * Peer-locked families: sets of packages whose members peer-depend on
- * each other at an EXACT version, so a partial bump cannot resolve.
+ * Peer-locked families: sets of packages that must move in lockstep because
+ * their members are linked at a pinned version, so a partial bump either
+ * cannot resolve or leaves an unwatched stale copy behind.
+ *
+ * Three edge kinds qualify, and the distinction matters when reading a
+ * diagnostic:
+ *   - **exact peer** -- `@angular/router` peers `@angular/core` at `21.2.22`.
+ *   - **exact dep**  -- `@playwright/test` depends on `playwright` at an
+ *     exact version; `@angular/cli` depends on `@angular-devkit/core` at one.
+ *   - **caret floor** -- `@angular/build` peers `@angular/ssr` at `^21.2.23`.
+ *     One-directional, but the floor rises with every patch release, so the
+ *     members still cannot skew downward independently.
  *
  * `.github/dependabot.yml` groups each family so Dependabot proposes
  * them together, but a group only constrains Dependabot's
@@ -458,16 +468,27 @@ export function printMetadataMessage(workspace, offenders) {
  * which is exactly why they need asserting: `@vitest/browser` carried two
  * critical advisories (issue #533) while being invisible on the manifest.
  *
+ * `sharesMajorWith` names a sibling family that ships separately but is
+ * coupled at the major boundary (see the Angular pair below). Members of
+ * the two families may differ at patch level; their majors may not.
+ *
  * The "at the family's own version" qualifier is load-bearing. Some
  * transitives are exact-pinned but on a *different* numbering: the Angular
  * devkit pins `@angular-devkit/architect` and `@angular-devkit/build-webpack`
- * at `0.2102.22` while the family itself is at `21.2.22`. That is the
- * long-standing Angular `0.MMmm.pp` scheme, not drift. This gate asserts
- * one shared version per family, so those two are deliberately out of
- * scope rather than silently missed; asserting them would need a
- * version-mapping mechanism nothing else here requires, and the family
- * already moves as a single Dependabot group. `@angular-devkit/core` and
- * `@angular/build` *are* pinned at `21.2.22`, so they are listed.
+ * at `0.2102.23` while the tooling family itself is at `21.2.23`. That is the
+ * long-standing Angular `0.MMmm.pp` scheme, not drift. This gate asserts one
+ * shared version per family, so those two are out of scope of the equality
+ * check -- but they are not unwatched. Both are exact-pinned *by members this
+ * gate already holds equal*:
+ *
+ *     @angular-devkit/architect@0.2102.23      <- @angular/build, build-angular
+ *     @angular-devkit/build-webpack@0.2102.23  <- @angular-devkit/build-angular
+ *     @angular-devkit/architect -> @angular-devkit/core: "21.2.23"  (exact)
+ *
+ * so neither can drift while its pinners are locked. That is a coverage
+ * argument, not a cost argument: a version-mapping mechanism would add
+ * machinery nothing else here requires and buy no coverage this closure
+ * does not already provide.
  *
  * See docs/supply-chain.md -> "Peer-locked dependency families".
  */
@@ -493,20 +514,37 @@ export const PEER_LOCKED_FAMILIES = [
     ],
     issue: '#533',
   },
-  // The Angular runtime + devkit peer-lock at an exact version:
-  // @angular/core peers @angular/compiler exactly, @angular/compiler-cli
-  // peers @angular/compiler exactly, @angular/router peers common /core /
-  // platform-browser exactly, and so on. `.github/dependabot.yml` has
-  // grouped them since before this gate existed; this is the matching
-  // detection half.
+  // Angular ships from TWO repos on independent release cadences, and they
+  // share a version *number* by convention only:
   //
-  // The `declared` list below is the root-declared half of the family.
-  // The `followers` list is the transitive half -- packages pinned at the
-  // family version by a declared member but absent from package.json
-  // (see the follower list for which parent pins each). Both halves are
-  // asserted; an earlier revision of this comment claimed the family had
-  // no followers, which was wrong and made the transitive coverage look
-  // accidental.
+  //   angular/angular      -> core, common, compiler, compiler-cli, router,
+  //                           forms, localize, platform-*, animations
+  //   angular/angular-cli  -> cli, ssr, build, @angular-devkit/*,
+  //                           @schematics/angular, @ngtools/webpack
+  //
+  // Treating them as ONE family asserted a false invariant. It deadlocked
+  // PR #552: the CLI repo published 21.2.23 while the framework's 21.x line
+  // ended at 21.2.22, and the gate demanded `@angular/core@21.2.23`, which
+  // does not exist. `npm ci` resolves that lockfile fine, because every
+  // framework<->tooling edge observed at 21.2.23 is `^MAJOR.0.0`:
+  //
+  //   @angular/build -> @angular/core: "^21.0.0"   (NOT exact)
+  //
+  // Intra-cohort edges are what actually lock. Verified at 21.2.23:
+  //
+  //   @angular/router  -> @angular/core:           "21.2.22"  (exact peer)
+  //   @angular/cli     -> @angular-devkit/core:    "21.2.23"  (exact dep)
+  //   @angular/build   -> @angular/ssr:           "^21.2.23"  (caret floor)
+  //
+  // That `^21.2.23` floor is why the two cohorts get separate families
+  // rather than the tooling half simply being dropped: a lone `@angular/ssr`
+  // left behind at 21.2.22 genuinely fails to install.
+  //
+  // OBSERVED, NOT GUARANTEED: the cross-cohort edges are caret-at-major as
+  // of 21.2.23, but angular-cli demonstrably does emit patch-floored peer
+  // ranges (the ssr edge above). Re-verify this boundary on any Angular
+  // minor -- if a cross-cohort edge ever gains a patch floor, these two
+  // families must merge again.
   {
     name: 'angular',
     workspace: 'root',
@@ -521,20 +559,30 @@ export const PEER_LOCKED_FAMILIES = [
       '@angular/platform-browser',
       '@angular/platform-server',
       '@angular/router',
-      '@angular/ssr',
-      '@angular/cli',
-      '@angular-devkit/build-angular',
     ],
+    // Every framework package this repo consumes is a root declaration, so
+    // the cohort has no manifest-invisible transitives to chase.
+    followers: [],
+  },
+  {
+    name: 'angular-tooling',
+    workspace: 'root',
+    // Coupled to the framework only at the major boundary (`^21.0.0` above).
+    // Patch-level skew between the cohorts is legitimate; major skew is not,
+    // and would ERESOLVE.
+    sharesMajorWith: 'angular',
+    declared: ['@angular/cli', '@angular/ssr', '@angular-devkit/build-angular'],
     // Pinned at the family version and absent from package.json:
-    // build-angular pins core + @angular/build; @angular/cli pins
-    // @angular-devkit/schematics and @schematics/angular, and
-    // @schematics/angular pins core + schematics in turn. The
-    // `0.2102.22`-mapped devkit packages are excluded by design -- see the
+    // build-angular pins @angular/build and @ngtools/webpack; @angular/cli
+    // pins @angular-devkit/core, @angular-devkit/schematics and
+    // @schematics/angular, which pins devkit/schematics in turn. The
+    // `0.2102.pp`-mapped packages are covered transitively -- see the
     // version-mapping note above.
     followers: [
       '@angular-devkit/core',
       '@angular-devkit/schematics',
       '@angular/build',
+      '@ngtools/webpack',
       '@schematics/angular',
     ],
   },
@@ -592,6 +640,11 @@ export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
   const packages = lock?.packages;
   if (typeof packages !== 'object' || packages === null) return problems;
 
+  // family name -> the single version every member agreed on, recorded only
+  // when the family is internally uniform. Feeds the cross-family major
+  // check after the main loop.
+  const agreedVersions = new Map();
+
   for (const family of PEER_LOCKED_FAMILIES) {
     if (family.workspace !== workspaceName) continue;
 
@@ -622,8 +675,9 @@ export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
       const detail = [...ranges].map(([n, r]) => `${n}=${r}`).join(', ');
       problems.push(
         `${family.name} family: declared ranges diverge (${detail}). ` +
-          `These packages peer-depend on each other at an exact version, so a ` +
-          `partial bump cannot resolve -- npm will ERESOLVE on install.${issueSuffix(family)}`,
+          `These packages are linked at a pinned version (exact peer, exact ` +
+          `dep, or a caret floor), so a partial bump cannot resolve -- npm ` +
+          `will ERESOLVE on install.${issueSuffix(family)}`,
       );
     }
 
@@ -666,9 +720,50 @@ export function checkPeerLockedFamilies(pkg, lock, workspaceName) {
           `Every member -- including transitives not named in package.json -- ` +
           `must be at the same version.${issueSuffix(family)}`,
       );
+    } else if (distinctResolved.size === 1) {
+      agreedVersions.set(family.name, [...distinctResolved][0]);
+    }
+  }
+
+  // Cross-family major agreement. Splitting a family by release cadence
+  // buys patch-level independence, but the coupling that remains is real:
+  // `@angular/build@21.x` peers `@angular/core: "^21.0.0"`, so framework@22
+  // + tooling@21 ERESOLVEs. Without this, each family would be internally
+  // uniform and Phase 1 would pass on a lockfile that cannot install.
+  //
+  // The Dependabot group is NOT sufficient cover for this. Per the header
+  // above, a group only constrains Dependabot's version-update output --
+  // not a security PR, a hand edit, a bad merge, or an agent session.
+  for (const family of PEER_LOCKED_FAMILIES) {
+    if (family.workspace !== workspaceName) continue;
+    if (!family.sharesMajorWith) continue;
+
+    const ourVersion = agreedVersions.get(family.name);
+    const theirVersion = agreedVersions.get(family.sharesMajorWith);
+    // Absent or already-divergent families are reported above; do not
+    // stack a second, more confusing diagnostic on the same root cause.
+    if (!ourVersion || !theirVersion) continue;
+
+    const ourMajor = majorOf(ourVersion);
+    const theirMajor = majorOf(theirVersion);
+    if (ourMajor !== null && theirMajor !== null && ourMajor !== theirMajor) {
+      problems.push(
+        `${family.name} family: major version ${ourMajor} does not match ` +
+          `'${family.sharesMajorWith}' family major ${theirMajor} ` +
+          `(${family.name}@${ourVersion}, ${family.sharesMajorWith}@${theirVersion}). ` +
+          `These families release separately and may differ at patch level, but ` +
+          `they peer each other at '^MAJOR.0.0', so a major split cannot resolve ` +
+          `-- npm will ERESOLVE on install.${issueSuffix(family)}`,
+      );
     }
   }
   return problems;
+}
+
+/** Leading integer of a semver string, or null when unparseable. */
+function majorOf(version) {
+  const match = /^(\d+)\./.exec(String(version ?? ''));
+  return match ? Number(match[1]) : null;
 }
 
 function printPeerLockedFamilyMessage(workspace, problems) {
@@ -678,6 +773,9 @@ function printPeerLockedFamilyMessage(workspace, problems) {
     console.error(`  ${problem}`);
   }
   console.error('  Fix: bump every member of the family to the same version in one change.');
+  console.error('    A family is one release cadence. Angular ships as TWO: the framework');
+  console.error('    (angular/angular) and the CLI/devkit (angular/angular-cli). They may');
+  console.error('    differ at patch level -- only their majors must match.');
   console.error('    See docs/supply-chain.md -> "Peer-locked dependency families".');
 }
 

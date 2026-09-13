@@ -97,10 +97,31 @@ updates:
       - dependency-name: '@angular-devkit/schematics'
         update-types: ['version-update:semver-major']
     groups:
-      # Angular runtime + dev tooling are peer-locked: @angular/compiler-cli
-      # and friends must match @angular/* exactly. Bundle every @angular/* and
-      # @angular-devkit/* package (regardless of dependency-type) into one PR
-      # so a single Angular release lands as a single mergeable change.
+      # Angular ships from TWO repos on independent release cadences:
+      # angular/angular (core, common, compiler-cli, router, ...) and
+      # angular/angular-cli (cli, ssr, build, @angular-devkit/*). They share a
+      # version *number* by convention only -- their patch streams diverge
+      # routinely. PR #552 is the worked example: the CLI published 21.2.23
+      # while the framework's 21.x line ended at 21.2.22, and there is no
+      # @angular/core@21.2.23 to "catch up" to.
+      #
+      # They nonetheless stay in ONE group, because the cohorts remain coupled
+      # at the MAJOR boundary: @angular/build peers @angular/core at ^21.0.0,
+      # so a framework-only v22 PR would leave the tooling half unable to
+      # resolve, and vice versa. One group means a major lands as one PR.
+      #
+      # NOTE: that coupling is currently inert on the version path -- the
+      # `ignore` block above drops semver-major for @angular/* and the devkit
+      # packages while #550 is open. It becomes load-bearing the moment those
+      # ignores are lifted, which is exactly when a split group would break.
+      # Whoever closes #550: do not split this group.
+      #
+      # scripts/check-lockfile.mjs holds the detection half as two separate
+      # families (`angular` + `angular-tooling`), listed on this group's
+      # GROUP_POLICY entry via `families`. Patch-level skew between cohorts is
+      # legitimate; skew WITHIN a cohort, or a major split between them, is
+      # not and fails the gate.
+      #
       # Material/CDK are released on a separate cadence and stay carved out.
       #
       # `applies-to` is explicit on every group in this file. It defaults to
