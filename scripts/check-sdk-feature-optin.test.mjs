@@ -1,33 +1,38 @@
 // Unit tests for scripts/check-sdk-feature-optin.mjs.
 //
-// Runs under Node's built-in test runner: `node --test`. No external
-// dependencies. The script guards `main()` behind an "invoked directly" check,
-// so importing it here does not trigger CLI side effects.
+// Runs under Node's built-in test runner: `node --test`. The script guards
+// `main()` behind an "invoked directly" check, so importing it here does not
+// trigger CLI side effects.
 //
-// Coverage focuses on the pure parse/compare functions. The end-to-end path
-// against the real installed SDK is exercised by
-// `npm run lint:sdk-feature-optin`.
+// Coverage focuses on the parse/compare functions. The end-to-end path against
+// the real installed SDK is exercised by `npm run lint:sdk-feature-optin`.
 //
 // Background: PR #566. `@microsoft/applicationinsights-web` 3.4.3 added a
 // `SdkStats` feature defaulting to `enable`, which emits SDK self-stats onto
 // our own connection string. A unit test asserting our own config literal
 // cannot detect the NEXT such feature; this gate reads the SDK's own default
 // map so that a new or flipped default fails loudly.
+//
+// The fixtures below deliberately include shapes the SDK does NOT currently
+// emit in `dist-es5/AISku.js`. A suite built only from the shape the parser
+// already handles cannot demonstrate robustness to a shape change -- and the
+// first revision of this gate shipped exactly that gap, silently skipping any
+// entry whose `mode` was not the first property.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import ts from 'typescript';
 
 import {
-  FEATURE_POLICY,
-  checkDisabledFeaturesDeclared,
   checkFeaturePolicy,
-  extractFeatureOptInBlock,
-  parseFeatureOptInDefaults,
-  parseStringConstants,
+  collectStringConstants,
+  findFeatureMapInitializer,
+  parseSdkFeatureDefaults,
 } from './check-sdk-feature-optin.mjs';
+import { FEATURE_OPT_IN_MODE, FEATURE_POLICY } from './sdk-feature-policy.mjs';
 
-// A trimmed stand-in for the shape `dist-es5/AISku.js` actually emits.
-const SDK_SOURCE = `
+/** Mirrors the shape of the real `dist-es5/AISku.js` (downleveled ES5). */
+const ES5_SOURCE = `
 var IKEY_USAGE = "iKeyUsage";
 var CDN_USAGE = "CdnUsage";
 var SDK_LOADER_VER = "SdkLoaderVer";
@@ -48,96 +53,180 @@ var defaultConfigValues = {
 };
 `;
 
+/**
+ * Mirrors the real minified bundle the same package publishes at
+ * `browser/es5/ai.3.4.4.min.js`: comma-joined `var` declarators, no spaces,
+ * and one entry rewritten from a computed key to a plain member assignment
+ * (`Y1.zipPayload={mode:1}`) -- a form the first revision of this gate did not
+ * enumerate at all.
+ */
+const MINIFIED_SOURCE =
+  'var a="dependencies",Xy="iKeyUsage",Jy="CdnUsage",$y="SdkLoaderVer",Gy="SdkStats",' +
+  'Qy={featureOptIn:((Y1={})[Xy]={mode:3},Y1[Jy]={mode:2},Y1[$y]={mode:2},' +
+  'Y1.zipPayload={mode:1},Y1[Gy]={mode:3},Y1),sdkStats:cfgDfMerge({int:9e5})};';
+
+function sorted(map) {
+  return [...map.entries()].sort(([left], [right]) => left.localeCompare(right));
+}
+
+const ALL_FIVE = [
+  ['CdnUsage', 2],
+  ['SdkLoaderVer', 2],
+  ['SdkStats', 3],
+  ['iKeyUsage', 3],
+  ['zipPayload', 1],
+].sort(([left], [right]) => left.localeCompare(right));
+
 // ---------------------------------------------------------------------------
-// parseStringConstants
+// collectStringConstants
 // ---------------------------------------------------------------------------
 
-test('parseStringConstants resolves the feature-name constants', () => {
-  const constants = parseStringConstants(SDK_SOURCE);
+test('collectStringConstants resolves the feature-name constants', () => {
+  const sourceFile = ts.createSourceFile(
+    'x.js',
+    ES5_SOURCE,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  const constants = collectStringConstants(sourceFile);
   assert.equal(constants.get('SDK_STATS'), 'SdkStats');
   assert.equal(constants.get('ZIP_PAYLOAD'), 'zipPayload');
 });
 
-test('parseStringConstants handles single quotes', () => {
-  assert.equal(parseStringConstants(`var A = 'value';`).get('A'), 'value');
-});
-
-test('parseStringConstants ignores non-string declarations', () => {
-  const constants = parseStringConstants('var COUNT = 900000;');
-  assert.equal(constants.has('COUNT'), false);
+test('collectStringConstants handles comma-joined declarator lists', () => {
+  // The minified bundle emits `var a="x",b="y",...` -- one declaration with
+  // many declarators. The first revision's regex required `var` immediately
+  // before each name and resolved zero of them.
+  const sourceFile = ts.createSourceFile(
+    'x.js',
+    MINIFIED_SOURCE,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  const constants = collectStringConstants(sourceFile);
+  assert.equal(constants.get('Gy'), 'SdkStats');
+  assert.equal(constants.get('Xy'), 'iKeyUsage');
 });
 
 // ---------------------------------------------------------------------------
-// extractFeatureOptInBlock -- must fail closed, never return empty
+// parseSdkFeatureDefaults -- the shapes that matter
 // ---------------------------------------------------------------------------
 
-test('extractFeatureOptInBlock returns the balanced block', () => {
-  const block = extractFeatureOptInBlock(SDK_SOURCE);
-  assert.ok(block.startsWith('('));
-  assert.ok(block.endsWith(')'));
-  assert.ok(block.includes('SDK_STATS'));
-  // Must stop at the block, not swallow the sibling sdkStats default.
-  assert.equal(block.includes('int: 900000'), false);
+test('parses the downleveled ES5 shape the SDK ships today', () => {
+  assert.deepEqual(sorted(parseSdkFeatureDefaults(ES5_SOURCE)), ALL_FIVE);
 });
 
-test('extractFeatureOptInBlock throws when the default is absent', () => {
+test('parses the minified shape, including a dot-assignment entry', () => {
+  // Regression: the first revision enumerated only computed-key assignments,
+  // so `Y1.zipPayload={mode:1}` vanished from the result while the count
+  // stayed nonzero -- a silent under-report.
+  assert.deepEqual(sorted(parseSdkFeatureDefaults(MINIFIED_SOURCE)), ALL_FIVE);
+});
+
+test('parses an entry whose mode is not the first property', () => {
+  // Regression (the reviewer's exact case): `{ blockCdnCfg: false, mode: 3 }`
+  // was silently skipped by the regex, which required `{ mode: <digits>`.
+  const defaults = parseSdkFeatureDefaults(
+    'var A = "SdkStats", B = "NewFeature";\n' +
+      'var d = { featureOptIn: (_a = {}, _a[A] = { mode: 2 }, ' +
+      '_a[B] = { blockCdnCfg: false, mode: 3 }, _a) };',
+  );
+  assert.equal(defaults.get('NewFeature'), 3);
+  assert.equal(defaults.get('SdkStats'), 2);
+});
+
+test('parses a plain object-literal feature map', () => {
+  const defaults = parseSdkFeatureDefaults('var d = { featureOptIn: { SdkStats: { mode: 3 } } };');
+  assert.equal(defaults.get('SdkStats'), 3);
+});
+
+test('parses a computed string-literal key', () => {
+  const defaults = parseSdkFeatureDefaults(
+    'var d = { featureOptIn: (_a = {}, _a["SdkStats"] = { mode: 3 }, _a) };',
+  );
+  assert.equal(defaults.get('SdkStats'), 3);
+});
+
+test('treats a missing mode as none rather than failing', () => {
+  // `IFeatureOptInDetails.mode` is optional in the SDK's own contract, and
+  // absence means "fall through to the call-site default". Throwing here
+  // would fail CI on a legal bundle.
+  const defaults = parseSdkFeatureDefaults(
+    'var d = { featureOptIn: (_a = {}, _a["SdkStats"] = { blockCdnCfg: true }, _a) };',
+  );
+  assert.equal(defaults.get('SdkStats'), FEATURE_OPT_IN_MODE.none);
+});
+
+test('does not mistake a nested onCfg object for a feature entry', () => {
+  const defaults = parseSdkFeatureDefaults(
+    'var d = { featureOptIn: (_a = {}, _a["SdkStats"] = ' +
+      '{ mode: 3, onCfg: { someField: 1 }, offCfg: { other: 2 } }, _a) };',
+  );
+  assert.deepEqual([...defaults.keys()], ['SdkStats']);
+});
+
+test('is not confused by comments or braces inside strings', () => {
+  // The whole point of parsing with the compiler rather than by hand.
+  const defaults = parseSdkFeatureDefaults(
+    'var LABEL = "not { a: real } entry"; // featureOptIn: { Decoy: { mode: 3 } }\n' +
+      '/* featureOptIn: { AlsoDecoy: { mode: 3 } } */\n' +
+      'var d = { featureOptIn: (_a = {}, _a["SdkStats"] = { mode: 3 }, _a) };',
+  );
+  assert.deepEqual([...defaults.keys()], ['SdkStats']);
+});
+
+// ---------------------------------------------------------------------------
+// parseSdkFeatureDefaults -- fail-closed behavior
+// ---------------------------------------------------------------------------
+
+test('throws on a symbolic mode rather than skipping the entry', () => {
   assert.throws(
-    () => extractFeatureOptInBlock('var defaultConfigValues = { connectionString: 1 };'),
+    () =>
+      parseSdkFeatureDefaults(
+        'var d = { featureOptIn: (_a = {}, _a["NewFeature"] = { mode: MODE_ENABLE }, _a) };',
+      ),
+    /declares a non-literal mode/,
+  );
+});
+
+test('throws when a key identifier cannot be resolved', () => {
+  assert.throws(
+    () =>
+      parseSdkFeatureDefaults(
+        'var d = { featureOptIn: (_a = {}, _a[MYSTERY] = { mode: 3 }, _a) };',
+      ),
+    /could not resolve feature key identifier 'MYSTERY'/,
+  );
+});
+
+test('throws when the feature map is absent', () => {
+  assert.throws(
+    () => parseSdkFeatureDefaults('var defaultConfigValues = { connectionString: 1 };'),
     /could not find a 'featureOptIn:' default/,
   );
 });
 
-test('extractFeatureOptInBlock throws on unbalanced parentheses', () => {
+test('throws when more than one feature map is present', () => {
   assert.throws(
-    () => extractFeatureOptInBlock('featureOptIn: (_a = {}, _a[X] = { mode: 3 },'),
-    /never closed its parentheses/,
+    () =>
+      parseSdkFeatureDefaults(
+        'var a = { featureOptIn: { X: { mode: 1 } } }, b = { featureOptIn: { Y: { mode: 1 } } };',
+      ),
+    /expected exactly one/,
   );
 });
 
-// ---------------------------------------------------------------------------
-// parseFeatureOptInDefaults
-// ---------------------------------------------------------------------------
-
-test('parseFeatureOptInDefaults reads every key and mode', () => {
-  const defaults = parseFeatureOptInDefaults(SDK_SOURCE);
-  assert.deepEqual(
-    [...defaults.entries()].sort(),
-    [
-      ['CdnUsage', 2],
-      ['SdkLoaderVer', 2],
-      ['SdkStats', 3],
-      ['iKeyUsage', 3],
-      ['zipPayload', 1],
-    ].sort(),
-  );
-});
-
-test('parseFeatureOptInDefaults accepts literal string keys', () => {
-  const defaults = parseFeatureOptInDefaults(
-    'featureOptIn: (_a = {}, _a["SdkStats"] = { mode: 3 }, _a),',
-  );
-  assert.equal(defaults.get('SdkStats'), 3);
-});
-
-test('parseFeatureOptInDefaults accepts a plain object literal form', () => {
-  const defaults = parseFeatureOptInDefaults('featureOptIn: ({ SdkStats: { mode: 3 } }),');
-  assert.equal(defaults.get('SdkStats'), 3);
-});
-
-test('parseFeatureOptInDefaults throws when an identifier cannot be resolved', () => {
-  // Fail closed: an unresolvable key must not be silently skipped, or the
-  // gate would report a shorter feature list than the SDK actually ships.
+test('throws when the map parses to zero entries', () => {
   assert.throws(
-    () => parseFeatureOptInDefaults('featureOptIn: (_a = {}, _a[MYSTERY] = { mode: 3 }, _a),'),
-    /could not resolve feature key identifier\(s\) MYSTERY/,
+    () => parseSdkFeatureDefaults('var d = { featureOptIn: (_a = {}, _a) };'),
+    /parsed no feature entries/,
   );
 });
 
-test('parseFeatureOptInDefaults throws when the block parses to nothing', () => {
-  assert.throws(
-    () => parseFeatureOptInDefaults('featureOptIn: (_a = {}, _a),'),
-    /found no feature entries/,
-  );
+test('findFeatureMapInitializer is exported for targeted diagnosis', () => {
+  assert.equal(typeof findFeatureMapInitializer, 'function');
 });
 
 // ---------------------------------------------------------------------------
@@ -158,7 +247,7 @@ test('checkFeaturePolicy passes when defaults match the policy', () => {
 });
 
 test('checkFeaturePolicy flags an unclassified new SDK feature', () => {
-  // This is the PR #566 scenario replayed one release later.
+  // The PR #566 scenario replayed one release later.
   const defaults = new Map([
     ['SdkStats', 3],
     ['zipPayload', 1],
@@ -182,8 +271,7 @@ test('checkFeaturePolicy flags a changed SDK default mode', () => {
 
 test('checkFeaturePolicy flags a policy entry the SDK dropped', () => {
   // A rename would otherwise leave our opt-out keyed on a dead name.
-  const defaults = new Map([['SdkStats', 3]]);
-  const problems = checkFeaturePolicy(defaults, POLICY);
+  const problems = checkFeaturePolicy(new Map([['SdkStats', 3]]), POLICY);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /classifies 'zipPayload' but the installed SDK no longer defaults it/);
 });
@@ -196,38 +284,32 @@ test('checkFeaturePolicy reports an unknown mode number readably', () => {
 });
 
 // ---------------------------------------------------------------------------
-// checkDisabledFeaturesDeclared
-// ---------------------------------------------------------------------------
-
-test('checkDisabledFeaturesDeclared passes when the opt-out is present', () => {
-  const source = 'featureOptIn: { SdkStats: { mode: 2, blockCdnCfg: true } }';
-  assert.deepEqual(checkDisabledFeaturesDeclared(POLICY, source), []);
-});
-
-test('checkDisabledFeaturesDeclared flags a dropped opt-out', () => {
-  const problems = checkDisabledFeaturesDeclared(POLICY, 'connectionString,');
-  assert.equal(problems.length, 1);
-  assert.match(problems[0], /'SdkStats' is classified 'disable'/);
-});
-
-test('checkDisabledFeaturesDeclared ignores inert-when-dropped features', () => {
-  // zipPayload is deliberately absent from app-insights-config.ts.
-  assert.deepEqual(checkDisabledFeaturesDeclared(POLICY, 'SdkStats'), []);
-});
-
-// ---------------------------------------------------------------------------
 // The shipped policy itself
 // ---------------------------------------------------------------------------
 
 test('FEATURE_POLICY entries are complete and well-formed', () => {
   const decisions = new Set(['disable', 'inert-when-dropped']);
+  const modes = new Set(Object.values(FEATURE_OPT_IN_MODE));
   for (const [name, entry] of Object.entries(FEATURE_POLICY)) {
     assert.ok(decisions.has(entry.decision), `${name} has an unknown decision`);
-    assert.equal(typeof entry.sdkDefaultMode, 'number', `${name} is missing sdkDefaultMode`);
+    assert.ok(modes.has(entry.sdkDefaultMode), `${name} has an out-of-range sdkDefaultMode`);
     assert.ok(entry.rationale.length > 0, `${name} is missing a rationale`);
   }
 });
 
 test('FEATURE_POLICY opts out of SdkStats', () => {
   assert.equal(FEATURE_POLICY.SdkStats.decision, 'disable');
+});
+
+test('the shipped policy accepts the ES5 fixture end to end', () => {
+  assert.deepEqual(checkFeaturePolicy(parseSdkFeatureDefaults(ES5_SOURCE), FEATURE_POLICY), []);
+});
+
+test('the shipped policy accepts the minified fixture end to end', () => {
+  // Same feature set, different bundler output: the policy must not be
+  // coupled to one build's syntax.
+  assert.deepEqual(
+    checkFeaturePolicy(parseSdkFeatureDefaults(MINIFIED_SOURCE), FEATURE_POLICY),
+    [],
+  );
 });

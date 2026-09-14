@@ -1,3 +1,4 @@
+import { FEATURE_POLICY } from '../../../../scripts/sdk-feature-policy.mjs';
 import { buildAppInsightsConfig } from './app-insights-config';
 
 const CONNECTION_STRING = 'InstrumentationKey=00000000-0000-0000-0000-000000000000';
@@ -7,12 +8,12 @@ describe('buildAppInsightsConfig', () => {
     expect(buildAppInsightsConfig(CONNECTION_STRING).connectionString).toBe(CONNECTION_STRING);
   });
 
-  describe('manual-instrumentation invariant', () => {
-    // These are one invariant, not five preferences: the SPA telemetry
-    // inventory is manual, so every SDK stream that emits on a timer or on
-    // user activity stays off. Ajax tracking is the deliberate exception -
-    // it is on for SPA <-> Functions correlation, with error response
-    // bodies off.
+  describe('SDK auto-emitters this function turns off', () => {
+    // Scoped to what this function configures. Deliberately NOT a claim
+    // that these are the only SDK-originated streams -- the SDK also
+    // emits auto-instrumented dependencies (on by choice, below), a
+    // browser perf-timing sidecar, and CRITICAL internal diagnostics.
+    // See docs/telemetry.md for the inventory of what actually arrives.
     it('keeps SDK auto-capture off', () => {
       const config = buildAppInsightsConfig(CONNECTION_STRING);
       expect(config.disableExceptionTracking).toBe(true);
@@ -31,10 +32,10 @@ describe('buildAppInsightsConfig', () => {
   });
 
   describe('featureOptIn', () => {
-    // Scope of this suite: it guards against the opt-out being REMOVED or
-    // weakened. It cannot catch the SDK renaming the `SdkStats` key or
-    // renumbering `FeatureOptInMode`, because both sides of the comparison
-    // would be our own literals. That drift is covered by
+    // Scope of this suite: it guards the opt-out against removal or
+    // weakening, by value, on the real object. It cannot catch the SDK
+    // renaming the `SdkStats` key or renumbering `FeatureOptInMode` --
+    // both sides would be our own literals. That drift is covered by
     // `scripts/check-sdk-feature-optin.mjs`, which reads the installed
     // SDK's own default map.
     it('disables SdkStats so the SDK does not emit self-stats to customMetrics', () => {
@@ -48,6 +49,23 @@ describe('buildAppInsightsConfig', () => {
       // `featureOptIn` is not in the plugin's non-overridable set.
       const sdkStats = buildAppInsightsConfig(CONNECTION_STRING).featureOptIn?.['SdkStats'];
       expect(sdkStats?.blockCdnCfg).toBe(true);
+    });
+
+    it('declares every feature that policy classifies as disable', () => {
+      // The cross-artifact link. `scripts/check-sdk-feature-optin.mjs`
+      // owns the vendor side (what the SDK defaults); this owns our side
+      // (what we actually declare), because it can execute the config
+      // instead of re-parsing its syntax. Both read one FEATURE_POLICY,
+      // so classifying a new feature as `disable` without declaring it
+      // here fails the suite.
+      const featureOptIn = buildAppInsightsConfig(CONNECTION_STRING).featureOptIn ?? {};
+      const shouldDisable = Object.entries(FEATURE_POLICY)
+        .filter(([, entry]) => entry.decision === 'disable')
+        .map(([name]) => name);
+      expect(shouldDisable.length).toBeGreaterThan(0);
+      for (const name of shouldDisable) {
+        expect(featureOptIn[name]?.mode).toBe(2 /* FeatureOptInMode.disable */);
+      }
     });
 
     it('declares exactly the feature keys we have decided on', () => {

@@ -88,10 +88,10 @@ truth for all of the above; `app-insights-config.test.ts` asserts it.
 > **On any `@microsoft/applicationinsights-web` minor or major bump**,
 > re-verify the SDK's default `featureOptIn` map (in its
 > `dist-es5/AISku.js`) against `FEATURE_POLICY` in
-> `scripts/check-sdk-feature-optin.mjs`. That gate runs in `npm run lint`
-> and fails on a new feature key, a renamed one, a changed default mode, or
-> a dropped opt-out -- so this is normally automatic, but the decision it
-> forces is a human one. See PR #566 for the incident that motivated it.
+> `scripts/sdk-feature-policy.mjs`. `scripts/check-sdk-feature-optin.mjs`
+> runs in `npm run lint` and fails on a new feature key, a renamed one, or
+> a changed default mode -- so this is normally automatic, but the decision
+> it forces is a human one. See PR #566 for the incident that motivated it.
 
 If a query you expect to see is missing rows, the privacy initializer
 dropping a `?`-containing envelope is one likely cause.
@@ -108,20 +108,34 @@ Classic AI schema (App Insights resource):
 | `pageViews` | `RouteTracker` on each navigation |
 | `dependencies` | Auto-instrumented browser fetch/XHR (`disableAjaxTracking: false`); also outgoing calls from Functions |
 | `requests` | Auto-instrumented Function invocations |
+| `browserTimings` | SDK `PageViewPerformanceData` sidecar. Emitted **once per page load**, alongside the first `trackPageView` whose navigation timings become ready -- not once per route change. |
 
-Two SDK-originated streams are worth naming explicitly, because neither
-goes through `LoggerService` and neither appears in
-`telemetry-message-ids.ts`:
+`customMetrics` is deliberately absent: see `SdkStats` below.
+
+### SDK-originated streams
+
+These do not go through `LoggerService` and are not in
+`telemetry-message-ids.ts`, so they are worth naming individually. This
+list is maintained by hand and is only as fresh as its last review -- it
+is not a completeness guarantee. `scripts/check-sdk-feature-optin.mjs`
+mechanically covers the `featureOptIn` surface; the rest of this table
+does not have an equivalent gate yet (see issue #570).
 
 | Stream | Status |
 |---|---|
-| `traces` / `InternalMessageId: <n>` | **On**, and pre-dates this inventory. The SDK defaults `loggingLevelTelemetry` to CRITICAL and `loadAppInsights()` polls its internal log queue, so CRITICAL SDK diagnostics ship as `MessageData`. Conditional on an SDK error, so it is low-volume and genuinely diagnostic. |
-| `customMetrics` / `...SdkStats` | **Off**, deliberately -- see the Privacy contract above. This is why `customMetrics` has no row in the table above. |
+| `dependencies` (`RemoteDependencyData`) | **On, by choice.** `disableAjaxTracking: false` for SPA <-> Functions correlation. Emitted on user activity; URLs sanitized by the privacy initializer, and ajax error response bodies are off. |
+| `browserTimings` (`PageViewPerformanceData`) | **On.** Sidecar to the first ready `trackPageView`, once per page load. |
+| `traces` / `InternalMessageId: <n>` | **On**, and pre-dates this inventory. The SDK defaults `loggingLevelTelemetry` to CRITICAL and `loadAppInsights()` polls its internal log queue, so CRITICAL SDK diagnostics ship as `MessageData`. Conditional on an SDK error, so low-volume and genuinely diagnostic. |
+| `customMetrics` / `...SdkStats` | **Off**, deliberately -- see the Privacy contract above. |
 
-So the precise invariant is: *every SDK stream that emits on a timer or on
-user activity is off; the only SDK-originated envelopes we accept are
-conditional internal diagnostics on the error path.* It is not that the
-SDK emits nothing of its own.
+Not a telemetry stream, but an SDK-originated network call worth knowing
+about: the SDK's `CfgSyncPlugin` is constructed unconditionally and GETs
+`https://js.monitor.azure.com/scripts/b/ai.config.1.cfg.json` on init and
+then every 30 minutes. It is receive-only remote configuration, permitted
+by `connect-src` in `staticwebapp.config.json`. Our per-feature
+`blockCdnCfg` pins the `SdkStats` opt-out against it but does **not** stop
+the poll; the plugin-level switch
+(`extensionConfig.AppInsightsCfgSyncPlugin.blkCdnCfg`) is not set.
 
 LAW schema (Log Analytics workspace) -- same data, different table names:
 
@@ -133,6 +147,7 @@ LAW schema (Log Analytics workspace) -- same data, different table names:
 | `pageViews` | `AppPageViews` |
 | `dependencies` | `AppDependencies` |
 | `requests` | `AppRequests` |
+| `browserTimings` | `AppBrowserTimings` |
 
 The KQL examples below use the classic AI schema. To run them against the
 LAW directly, swap the table name and rename `timestamp` to `TimeGenerated`.

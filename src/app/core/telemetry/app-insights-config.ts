@@ -15,15 +15,29 @@ import type { IConfig, IConfiguration } from '@microsoft/applicationinsights-web
  * the SDK is dynamically imported on first `connect()` so its ~80 kB stays
  * out of `main-*.js`.
  *
- * ## Our posture
+ * ## What this function does and does not claim
  *
- * The SPA telemetry inventory is manual: every SDK stream that emits on a
- * timer or on user activity is off, and the only SDK-originated envelopes
- * we accept are conditional internal diagnostics on the error path (the
- * SDK's `loggingLevelTelemetry` CRITICAL messages). Everything we
- * deliberately emit goes through `LoggerService` and is catalogued in
- * `telemetry-message-ids.ts`. See DESIGN_SPEC "What we collect (SPA)" and
- * `docs/telemetry.md`.
+ * Scoped deliberately: this function turns off the SDK auto-emitters
+ * listed below, and says nothing about SDK behavior it does not
+ * configure. Three previous revisions of this comment asserted a
+ * universal ("the only SDK-originated envelopes we accept are ...") and
+ * each was falsified by a stream the author had not enumerated --
+ * auto-instrumented dependencies, the browser perf-timing sidecar, the
+ * CfgSync config poll. A universal quantifier over a vendor's
+ * auto-behavior has no owner and no detection mechanism: it goes stale
+ * on the dependency's release cadence while living in our source.
+ *
+ * The emitters this function turns off: auto exception capture
+ * (`disableExceptionTracking`), auto route tracking
+ * (`enableAutoRouteTracking`), ajax error response bodies
+ * (`enableAjaxErrorStatusText`), ajax perf tracking
+ * (`enableAjaxPerfTracking`), cookies (`disableCookiesUsage`), and
+ * SdkStats (`featureOptIn`). Ajax tracking itself is deliberately left
+ * ON for SPA <-> Functions correlation.
+ *
+ * `docs/telemetry.md` -> "Tables populated by jotjson" is the inventory
+ * of what actually reaches our resource, and is the place to look for
+ * the full picture.
  *
  * ## Why `featureOptIn` replaces rather than merges
  *
@@ -32,22 +46,9 @@ import type { IConfig, IConfiguration } from '@microsoft/applicationinsights-web
  * dynamic-config layer only deep-merges defaults carrying the merge flag.
  * Our object therefore REPLACES the SDK's whole default map. The four
  * dropped keys are all inert for an npm-installed, connection-string
- * app:
- *
- * - `iKeyUsage`   - default enable; absent falls back to the same `true`.
- * - `CdnUsage`    - default disable; absent falls back to `true`, but the
- *                   message is also gated on the SDK source URL containing
- *                   `az416426` (the CDN snippet). We load from npm.
- * - `SdkLoaderVer`- default disable; absent falls back to `true`, but the
- *                   message is also gated on snippet version < 6, and the
- *                   snippet version is `""` (NaN) for npm initialization.
- * - `zipPayload`  - default mode `none`, which already falls through to
- *                   each call site's own default.
- *
- * Mirroring the full default map instead would trade that known-inert
- * consequence for silent staleness against future SDK defaults. Drift is
- * caught by `scripts/check-sdk-feature-optin.mjs`, which requires an
- * explicit decision here for every key the installed SDK defaults.
+ * app; `scripts/sdk-feature-policy.mjs` records the reasoning per key,
+ * and `scripts/check-sdk-feature-optin.mjs` fails the build if the
+ * installed SDK ever defaults a key that policy does not classify.
  */
 export function buildAppInsightsConfig(connectionString: string): IConfiguration & IConfig {
   return {
@@ -80,6 +81,13 @@ export function buildAppInsightsConfig(connectionString: string): IConfiguration
       // otherwise flip this back to enabled at runtime, with no deploy,
       // because the SDK re-evaluates the flag inside a config-change
       // handler. `blockCdnCfg` makes our value win unconditionally.
+      //
+      // Scope note: `blockCdnCfg` is per-FEATURE. It pins this value
+      // against CDN override; it does NOT stop the poll itself, which is
+      // a plugin-level setting we do not set
+      // (`extensionConfig.AppInsightsCfgSyncPlugin.blkCdnCfg`). The poll
+      // is documented in docs/telemetry.md; changing that posture is
+      // tracked separately.
       //
       // `2` is a numeric literal on purpose -- do NOT convert it to
       // `FeatureOptInMode.disable`. That enum is not exported from
