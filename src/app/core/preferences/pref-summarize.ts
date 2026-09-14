@@ -3,16 +3,7 @@ const HEX_COLOR_PATTERN = /^#([0-9a-f]{6})$/i;
 const LOW_SATURATION_THRESHOLD = 0.11;
 
 export type ColorBucket =
-  | 'red'
-  | 'orange'
-  | 'yellow'
-  | 'green'
-  | 'teal'
-  | 'blue'
-  | 'purple'
-  | 'pink'
-  | 'gray'
-  | 'custom';
+  'red' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue' | 'purple' | 'pink' | 'gray' | 'custom';
 
 interface HslColor {
   hue: number;

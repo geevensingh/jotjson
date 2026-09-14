@@ -162,8 +162,7 @@ type ColdBootClipboardCandidate = {
 };
 
 type ColdBootClipboardReadRaceResult =
-  | { kind: 'read'; result: ClipboardGrantedReadResult }
-  | { kind: 'timeout' };
+  { kind: 'read'; result: ClipboardGrantedReadResult } | { kind: 'timeout' };
 
 /**
  * Origin path that surfaced the current M7p extract candidate. Used as a

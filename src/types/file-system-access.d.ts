@@ -33,13 +33,7 @@ interface FilePickerOptions {
   readonly excludeAcceptAllOption?: boolean;
   readonly id?: string;
   readonly startIn?:
-    | FileSystemHandle
-    | 'desktop'
-    | 'documents'
-    | 'downloads'
-    | 'music'
-    | 'pictures'
-    | 'videos';
+    FileSystemHandle | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos';
 }
 
 interface OpenFilePickerOptions extends FilePickerOptions {

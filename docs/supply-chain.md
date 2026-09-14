@@ -108,6 +108,525 @@ version.
 
 ---
 
+## Peer-locked dependency families
+
+Some packages are linked at a pinned version, so no partial bump can
+resolve -- npm `ERESOLVE`s on install. The Vitest toolchain is the
+canonical example; the two Angular cohorts are another (see the split
+below):
+
+```
+@vitest/browser-playwright@X
+  dependencies:      @vitest/browser  "X"   <- exact
+  peerDependencies:  vitest           "X"   <- exact
+
+@vitest/coverage-v8@X
+  peerDependencies:  vitest           "X"   <- exact
+                     @vitest/browser  "X"   <- exact (optional)
+
+vitest@X
+  peerDependencies:  @vitest/browser-playwright  "X"  <- exact (optional)
+                     @vitest/coverage-v8         "X"  <- exact (optional)
+```
+
+The lock is bidirectional, and one member (`@vitest/browser`) is a pure
+transitive that appears nowhere in `package.json`.
+
+### The rule
+
+Any root family whose members are linked at a pinned version gets all
+three of:
+
+1. **Coverage by a Dependabot group** in `.github/dependabot.yml`, over
+   the members Dependabot can actually propose, with a comment naming
+   the constraint. Usually a group of its own; one group may cover
+   **several** families when an inter-family constraint requires them to
+   move together (see the Angular split below). The group's
+   `GROUP_POLICY` entry names the families it covers in an explicit
+   `families: [...]` list.
+2. **An exclude in `dev-minor`** (or whatever generic group would
+   otherwise capture it), so members always route to the family group.
+3. **A lockstep assertion** in `PEER_LOCKED_FAMILIES` in
+   `scripts/check-lockfile.mjs`, listing the declared members and any
+   exact-pinned transitive `followers`.
+
+All three are required because they cover different inbound paths. The
+group is *prevention* and only governs Dependabot's **version-update**
+output; the `check-lockfile.mjs` assertion is *detection* and covers a
+security-update PR, a human, or an agent session equally.
+
+### What "coverage" means on each side (#552)
+
+The two halves range over **different sets**, and conflating them is a
+live source of confusion -- it produced a review comment on PR #552.
+
+- A **group** ranges over what Dependabot can propose. Aim it at the
+  closure, but understand that it only bites where a standalone proposal
+  is possible. For a transitive whose parent pins it **exactly**, that is
+  currently nothing: the version path proposes no standalone candidate,
+  and the security updater cannot remediate it at all -- which is exactly
+  why #533 reports no PR was ever opened for `@vitest/browser`.
+- The **lockstep assertion** ranges over the lockfile closure, including
+  manifest-invisible transitives. For an exact-pinned transitive it is
+  the *only* coverage, and that is by design, not an oversight.
+
+So neither set contains the other. `@ngtools/webpack` and
+`@schematics/angular` are asserted but unmatched by the `angular` group's
+patterns; `@angular-devkit/architect` and `@angular-devkit/build-webpack`
+are the mirror image -- matched by `@angular-devkit/*` but deliberately
+held out of `followers` because of the `0.MMmm.pp` numbering. No single
+assertion can make both directions total, which is why the rule above
+scopes group coverage to what is proposable rather than to the closure.
+
+**Do not "fix" an unmatched exact-pinned transitive by adding a literal
+pattern on its own.** Adding one is not free: `@ngtools/webpack` and
+`@schematics/angular` are on the mainline `21.2.x` numbering but are
+matched by **no** `ignore` entry, and the `angular` group carries no
+`update-types` filter. The moment such a package became proposable, the
+group would offer a 22.x member against a 21.2.x tree -- an unmergeable
+group PR that makes Dependabot skip the group by name and starves the
+21.2.x patch train, the precise failure the `ignore` block exists to
+prevent. A pattern addition therefore requires a matching `ignore` +
+`IGNORE_POLICY` entry in the same change. Tracked in #557.
+
+Three edge kinds qualify a family: an **exact peer**, an **exact dep**,
+or a **rising caret floor** (`^21.2.23`). The floor is one-directional,
+but it rises with every release, so members still cannot skew downward
+independently.
+
+`families: [...]` is required on every non-mirror peer-locked group and
+is never inferred from the group name. With an inferred mapping, deleting
+one of two co-grouped families still satisfies the group -> family
+direction via the survivor, and the loss is silent -- the same class of
+defect as the invisible `applies-to` default in #506.
+
+### One group, two families: Angular (PR #552)
+
+A family is **one release cadence**, not one ecosystem. Angular ships
+from two repos that share a version *number* by convention only:
+
+```
+angular/angular      -> core, common, compiler, compiler-cli, router,
+                        forms, localize, platform-*, animations
+angular/angular-cli  -> cli, ssr, build, @angular-devkit/*,
+                        @schematics/angular, @ngtools/webpack
+```
+
+Their patch streams diverge routinely. In PR #552 the CLI published
+`21.2.23` while the framework's 21.x line ended at `21.2.22` -- and a
+single `angular` family asserting one shared version demanded
+`@angular/core@21.2.23`, which does not exist. The PR was unmergeable by
+any action Dependabot could take. `npm ci` resolved that lockfile
+perfectly well, because the cross-cohort edges are caret-at-major:
+
+```
+@angular/build@21.2.23  peerDependencies:  @angular/core  "^21.0.0"
+```
+
+Intra-cohort edges are what actually lock, and all three kinds appear:
+
+```
+@angular/router -> @angular/core        "21.2.22"   exact peer
+@angular/cli    -> @angular-devkit/core "21.2.23"   exact dep
+@angular/build  -> @angular/ssr        "^21.2.23"   caret floor
+```
+
+So the cohorts are **two families** (patch-independent) in **one
+Dependabot group** (because `^21.0.0` still couples them at the major
+boundary -- a framework-only v22 PR would leave the tooling half unable
+to resolve). `angular-tooling` declares `sharesMajorWith: 'angular'`, and
+`check-lockfile.mjs` asserts the majors match, so the major hinge keeps a
+*detection* half rather than relying on the group alone.
+
+That major coupling is currently inert on the version path: the `ignore`
+block drops semver-major for `@angular/*` while #550 is open. It becomes
+load-bearing the moment those ignores lift, which is exactly when
+splitting the group would break. **Do not split the `angular` group when
+closing #550.**
+
+This boundary is **observed, not guaranteed**. angular-cli demonstrably
+does emit patch-floored peer ranges (the `@angular/ssr` edge above). If a
+*cross-cohort* edge ever gains a patch floor, the two families must merge
+again. Re-verify on any Angular minor.
+
+### Why (issue #533)
+
+`@vitest/browser` carried two critical advisories (CVE-2026-53633,
+CVE-2026-73653) while sitting in `dev-minor`. Dependabot's **security**
+updater could never remediate it: it is transitive, and its parent pins
+it exactly, so there was no standalone PR to open. The fix could only
+ever ride inside a version-update PR -- and it did, in group PR #491
+(`@vitest/browser-playwright` and `@vitest/coverage-v8` 4.1.7 ->
+4.1.10). When #491 was superseded by the regenerated #523, the
+`@vitest/*` bumps were dropped while co-tenants survived. The advisories
+stayed open with no signal that the remediation had vanished.
+
+This is the same class as the #514 DOMPurify case below: **the package
+that is actually vulnerable is not the package anyone is watching.**
+
+### Known limit
+
+Group membership is the exact-peer-locked set only. A package that
+straddles two families cannot be assigned correctly by any grouping --
+`@analogjs/vitest-angular` peers `vitest` at `^4.0.0` *and*
+`@angular-devkit/architect`, so it stays in `dev-minor`. A Vitest
+**major** therefore still needs a coordinated `@analogjs/vitest-angular`
+bump that Dependabot will not bundle. Document such limits in the group
+comment rather than leaving a claim the config cannot honor.
+
+---
+
+## Grouped security updates
+
+The rule above says a family group "only governs Dependabot's
+**version-update** output." This section is why that qualifier is load-
+bearing, and why adding `applies-to: security-updates` does not remove
+it.
+
+### The invisible default (issue #506)
+
+`groups.*.applies-to` defaults to `version-updates` when omitted. Every
+group in this repo omitted it, so security-driven PRs bypassed grouping
+entirely and arrived one per vulnerable package. Four Angular advisories
+produced #468-#471, each bumping a single `@angular/*` package, each
+failing at `npm ci`:
+
+```
+npm error code ERESOLVE
+npm error While resolving: @angular/animations@21.2.15
+npm error Found: @angular/core@21.2.17
+```
+
+Every group now declares `applies-to` explicitly, and
+`scripts/check-dependabot-config.mjs` fails the build if one does not.
+The default was not wrong; being invisible was.
+
+### Grouping consolidates the alarm. It does not fix it.
+
+A `-security` group turns N unmergeable PRs into **one** unmergeable PR.
+That is worth having -- one triage item instead of four, a quarter of
+the CI -- but it is not remediation, and the config comments must not
+imply otherwise.
+
+The reason is that a security job restricts group membership to the
+packages that actually carry an alert. Three independent filters:
+
+```ruby
+def allowed_dependencies
+  if job.security_updates_only?
+    dependencies.select { |d| T.must(job.dependencies).include?(d.name) }
+  else
+    dependencies.select { |d| job.allowed_update?(d) }
+  end
+end
+```
+-- `dependabot-core:updater/lib/dependabot/dependency_snapshot.rb`
+
+`assign_to_groups!(dependencies: allowed_dependencies)` then populates
+groups from that filtered list, and `GroupDependencySelector#filter_to_group!`
+re-applies `job.allowed_update?(dep, check_previous_version: true)`
+after resolution, which rejects any non-vulnerable dependency in
+security mode. `allow` is bypassed in security mode, so **no
+configuration key widens membership.**
+
+For an exact-pin family that is fatal. When four of the ten `@angular/*`
+runtime packages are alerted, the grouped PR bumps those four and leaves
+six behind -- still `ERESOLVE`. Two further reasons it cannot resolve
+itself:
+
+- **Per-package version floors.** Each package resolves to its own
+  minimum patched version (`fetch_lowest_security_fix_version` takes
+  `.min_by(&:version)`), so one grouped PR can carry `21.2.16` for
+  `platform-server` and `21.2.17` for the rest -- mutually
+  unsatisfiable, since `platform-server@21.2.16` exact-peers the others
+  at `21.2.16`.
+- **npm is invoked with `--force`.** The lockfile updater runs
+  `npm install <dep>@<ver> --force --ignore-scripts --package-lock-only`,
+  which *writes a peer-inconsistent lockfile* rather than floating the
+  peers. Upstream says so directly: *"Peer deps can be updated with
+  `--legacy-peer-deps` flag, but it is not recommended ... So we let the
+  update fail."*
+
+So the remedy for a peer-locked family is unchanged: a lockstep bump via
+the **version-update** group, or by hand. See the runbook below.
+
+Groups where a security counterpart is *inert* -- `vitest`,
+`playwright` -- get no `-security` group at all. Their vulnerable
+members are transitive and exact-pinned by a parent, so the security
+updater cannot open a PR for them under any configuration. Creating an
+empty group to satisfy a symmetry rule would be ceremony;
+`GROUP_POLICY` records the posture instead.
+
+### `update-types` on a security group is structurally broken
+
+GitHub's documented Example 4 shows `update-types: [patch, minor]` on an
+`applies-to: security-updates` group. **Do not copy it.** The SemVer
+gate compares against the registry's newest release:
+
+```ruby
+latest_version = version_class.new(checker.latest_version)
+return update_types.include?("major") if latest[:major] > current[:major]
+```
+-- `dependabot-core:updater/lib/dependabot/updater/group_update_creation.rb`
+
+On the version path that composes correctly, because `latest_version`
+is ignore-filtered. On the security path ignores are inert (next
+section), so `latest_version` can never be lowered by config -- and
+`semver_rules_allow_grouping?` has no security-mode branch, while the
+adjacent `all_versions_ignored?` does, so the asymmetry is deliberate
+upstream.
+
+Net: with Angular 22 published, a `[minor, patch]` Angular security
+group rejects every `@angular/*` package and each one falls through to
+an individual PR -- reproducing #506 while looking like a fix. The gate
+rejects `update-types` on any security group.
+
+### The two forms of `ignore` have opposite security semantics
+
+This is the sharpest edge in the whole config, because the two forms
+look almost identical:
+
+```ruby
+def ignored_versions(dependency, security_updates_only)
+  return versions if security_updates_only
+  return [ALL_VERSIONS] if versions.empty? && transformed_update_types.empty?
+  versions_by_type(dependency) + versions
+end
+```
+-- `dependabot-core:common/lib/dependabot/config/ignore_condition.rb`
+
+| Ignore entry | Version updates | Security updates |
+| --- | --- | --- |
+| `update-types:` only | suppressed | **NOT** suppressed |
+| `versions:` present | suppressed | **suppressed** |
+
+`update_types` is only consulted by `versions_by_type`, which the
+`security_updates_only` short-circuit makes unreachable. Corroborated by
+`job.rb`'s `ignored_versions_from_allowed_update_types`
+(`return [] if security_updates_only?`), and dependabot-core
+self-documents it: `log_ignore_conditions_for` prints
+`" (doesn't apply to security update)"` next to each update type.
+
+**Practical consequence:** every `ignore` in this repo is
+`update-types`-scoped, so none of them can mask an advisory. An entry
+carrying `versions:` *can*, so `IGNORE_POLICY` in
+`check-dependabot-config.mjs` requires that form to declare
+`suppressesSecurity: true`. You cannot add the dangerous shape by
+accident.
+
+One more asymmetry worth knowing: `ignore` globs match
+case-*insensitively* (`wildcard_match?` lowercases both sides), while
+`allowed_dependencies` uses a case-*sensitive* `Array#include?`
+(dependabot-core #14665). Mixed-case package names can silently drop out
+of a security group.
+
+### Why Angular majors are ignored
+
+Version updates always target `checker.latest_version`. `update-types`
+on a group only *routes* a candidate; it does not retarget one. So while
+Angular 22 is published and the repo is on 21.2.x, the `angular` group
+proposes 22.x **or nothing** -- and 22.x cannot install, because it
+requires TypeScript 6 (#550).
+
+That is not merely an unmergeable PR. It starves the 21.2.x patch train,
+which is the only mergeable delivery path for an Angular security fix.
+`ignore` is the sole key that lowers `latest_version` (via
+`filter_ignored_versions`), which is why the entry exists and why it is
+`update-types`-scoped rather than `versions:`-scoped.
+
+Confirmed in practice: within two minutes of #551 merging, Dependabot
+opened #552 bumping the `angular` group 21.2.22 -> 21.2.23. Before the
+ignore, that group could only ever have proposed 22.x.
+
+Two caveats recorded at the entry itself:
+
+- `ignore` has no `exclude-patterns`, so `'@angular/*'` also freezes
+  `@angular/material` / `@angular/cdk` majors, crossing the carve-out
+  the groups draw. Benign today (Material 22 peers `@angular/core: ^22`
+  and could not install on Angular 21 anyway), but it is a boundary
+  erased in one key that another key draws.
+- `@angular-devkit` is **enumerated, not globbed**.
+  `@angular-devkit/architect` and `/build-webpack` version as
+  `0.2102.x`, and `ignored_major_versions` increments segment 0, so a
+  glob emits `">= 1.a"` and does not gate the Angular 22 line
+  (`0.2200.x`) at all. Both are transitive-only today, so the glob would
+  have implied coverage the mechanism does not provide.
+
+**Residual risk.** If an Angular advisory is ever patched *only* in a
+major, the security PR still opens (the ignore does not suppress it),
+but it bumps just the alerted subset to 22.x and `ERESOLVE`s -- while
+the version-path escape hatch is suppressed. #550 bounds this.
+
+### Runbook: an `angular-security` (or `material-security`) PR appears
+
+1. **Expect it to be red.** Check whether the alerted set is the whole
+   peer cluster with a common floor. If not, the PR cannot merge -- that
+   is the design, not a bug.
+2. **Read the true floor** across all open alerts for the family:
+   `gh api repos/OWNER/REPO/dependabot/alerts --jq '...first_patched_version'`.
+   Take the highest, then use the newest published patch at or above it.
+3. **Do the lockstep bump by hand**, moving every declared member of the
+   family in `PEER_LOCKED_FAMILIES` together -- not just the alerted
+   ones. `npm run lint:lockfile` asserts you did. Note the unit of fix is
+   the **family**, not the group: `angular-security` alerts arrive under
+   one group name but span two families (`angular` and
+   `angular-tooling`), which move on separate patch streams. Bump each
+   affected family to its own newest patch; do **not** try to force both
+   cohorts onto a single shared version, which is the mistake #552
+   documents. Step 2's floor must likewise be computed per family.
+4. **Never** reach for `--legacy-peer-deps` or `--force` to make a
+   partial bump install (AGENTS.md Section 2 and Section 7 #12).
+5. **Close the alarm PR** once the lockstep bump lands -- but check
+   whether Dependabot has already done it. Two mechanisms are in play
+   and they pull in opposite directions:
+   - An open group PR causes Dependabot to *skip that group* on
+     subsequent runs (`find_existing_group_pr` ->
+     `mark_group_handled` -> `next`, matched by group **name**), so no
+     replacement PR is proposed while it sits there.
+   - A separate close-obsolete pass runs independently of that skip and
+     will close the PR on its own once the dependencies are "updatable
+     in another way."
+
+   Observed on 2026-09-10: #504 (the `angular` group targeting Angular
+   22) was closed by Dependabot itself ~3 minutes after an unrelated
+   `dependabot.yml` change merged, with the comment *"Looks like these
+   dependencies are updatable in another way, so this is no longer
+   needed."* #468 closed the same way when #551 merged. So the skip does
+   **not** trap a stale group PR open forever, as an earlier revision of
+   this runbook claimed.
+
+   Close it by hand only if it is still open after the next scheduled
+   run. The reason to care is the skip: while it is open, the group
+   proposes nothing, so a genuinely stuck PR does delay the next
+   advisory -- it just is not the permanent starvation the mechanism
+   alone suggests.
+
+### Watch the `overrides` interaction
+
+A grouped `dev-security` PR can include a package that also has a root
+`overrides` entry -- `fast-uri` and `hono` both qualify today. The
+override pins the resolution, so a bump past it is silently resolved
+back down. Move the override in the same PR, subject to the rule at the
+top of this document: never bump an override for a package whose shipped
+bytes it does not control.
+
+### What the gate does and does not prove
+
+`scripts/check-dependabot-config.mjs` validates the **file**. It cannot
+prove GitHub acts on it -- the same structural ceiling
+`check-swa-config.mjs` documents for itself. Observing a real run is the
+only proof, and #535 (scheduled alert-to-PR coverage auditor) is the
+runtime half.
+
+Note one blind spot #535 inherits from this change: it cross-references
+open alerts against open PRs, so an unmergeable `angular-security` alarm
+PR reads as "covered" when it is not.
+
+---
+
+## Registry provenance in the lockfile
+
+Every **registry tarball** entry in a committed lockfile must have a
+`resolved` URL that points at `registry.npmjs.org` over `https`, carries no
+userinfo, query string, or fragment, and an `integrity` that is `sha512-`.
+All of it is enforced by `checkMetadataFields` in
+`scripts/check-lockfile.mjs`, which runs in CI *before* `npm ci`.
+
+Two entry kinds are deliberately exempt, because they are not registry
+tarballs:
+
+- **`file:` sources** -- a local path, so there is no host to check.
+- **Git sources** (`git+...`) -- npm records no `integrity` for these, so
+  the gate instead requires the URL be pinned to a 40-hex commit SHA,
+  which is the only thing that fixes the content.
+
+The repo currently has neither, but the exemptions are in the checker so
+adding one later does not require weakening the registry rule.
+
+**Remote tarballs from other hosts are forbidden**, even with a valid
+sha512. `https://example.com/pkg.tgz` is a dependency Dependabot cannot
+version-update or security-patch and that `npm audit` cannot see -- a
+package nobody is watching, which is the failure class behind #514 and
+#533. If one is ever genuinely required, relax the gate deliberately and
+record the justification, the same way root `overrides` are classified.
+
+### Scope: this codifies the existing state, it does not change workflow
+
+This is not a new constraint on how you install. Before PR #534 every one
+of the 1214 entries in the root lockfile already resolved to
+`registry.npmjs.org` with a sha512 digest -- zero exceptions -- and the
+same held for `api/`. The gate makes that de-facto invariant explicit and
+enforced; it does not migrate anyone off anything.
+
+**Working behind a corporate mirror is still fine.** npm's
+`replace-registry-host` defaults to `npmjs`, which rewrites
+`registry.npmjs.org` hosts to your configured registry *at install time*.
+So a lockfile naming the public registry installs correctly both for
+direct consumers and through a mirror -- verified on #534 by running
+`npm ci` from a proxy against the repaired lockfile. The reverse is not
+true: a lockfile naming a mirror only works for people who can reach that
+mirror. Public URLs are the strictly more portable choice, which is why
+they are the committed form.
+
+The one thing to avoid is *committing* mirror-rewritten entries. Use
+`--registry=https://registry.npmjs.org/` on dependency commands (see
+Prevention below) and the gate never fires.
+
+### The failure mode (PR #534)
+
+If your `npm config get registry` points at a corporate proxy -- an Azure
+DevOps feed, Artifactory, Verdaccio -- then **any** command that
+re-resolves part of the tree will rewrite those entries:
+
+```
+"resolved": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/...",
+"integrity": "sha1-FlPBUhrpF/lg2bIYd3l8R9/YvyE="
+```
+
+Two distinct problems, neither of which any pre-existing gate caught:
+
+1. **Non-reproducible.** Contributors and CI outside that network cannot
+   resolve the URL. It also leaks internal infrastructure names into a
+   public repo.
+2. **Weaker digest.** An Azure DevOps feed advertises the legacy `shasum`
+   rather than `dist.integrity`, so npm records **sha1** instead of
+   sha512.
+
+`npm ci` accepts all of it, and CI can even pass if the proxy happens to
+be publicly reachable -- which is exactly what happened on #534, where 34
+entries were rewritten and every check went green.
+
+### Repairing it
+
+Do **not** regenerate the lockfile; that re-resolves every range and
+floats versions (AGENTS.md Section 7 #13). Repair the affected entries in
+place, taking `resolved` and `integrity` from the public registry:
+
+```
+npm view <name>@<version> dist.tarball dist.integrity \
+  --registry=https://registry.npmjs.org/ --json
+```
+
+`--registry` overrides the configured proxy for metadata reads, so this
+works even on a machine pointed at one. Afterwards, confirm the repair
+changed metadata only:
+
+- `npm run lint:lockfile-metadata` passes.
+- No entry's `version` changed (diff the lockfile and check).
+- Entries also present on `main` at the same version match it exactly.
+
+### Prevention
+
+Prefer running dependency commands with the public registry explicitly:
+
+```
+npm install --registry=https://registry.npmjs.org/ ...
+```
+
+The gate is the backstop, not the plan.
+
+---
+
 ## Case study: DOMPurify vendored inside Monaco (issue #514)
 
 ### What was wrong
@@ -150,7 +669,7 @@ count for what ships.
 ### The fix
 
 The override was removed, not bumped. npm now resolves the edge from
-Monaco's own declaration:
+Monaco's own declaration. Immediately after that PR:
 
 ```
 $ npm ls dompurify --all
@@ -161,6 +680,21 @@ jotjson@1.4.0
 
 The reported version now equals the vendored version, so Dependabot
 describes the artifact users actually download.
+
+Issue #524 then did the follow-on work of actually moving those bytes,
+bumping `monaco-editor` to 0.56.0. The current state is:
+
+```
+$ npm ls dompurify --all
+jotjson@<version>
+`-- monaco-editor@0.56.0
+    `-- dompurify@3.4.8
+```
+
+The root version is elided here on purpose: it drifts with every SemVer
+bump and says nothing about the dompurify edge this section is about. The
+0.55.1 snippet above keeps its literal `1.4.0` because it is a dated
+record of the state right after #514, not a claim about today.
 
 ### How to re-verify by hand
 
@@ -182,6 +716,13 @@ Note that Monaco's minifier **stripped the `@license` banner as of 0.56.0**,
 but a `version="x.y.z"` literal survives in both 0.55.1 and 0.56.0. The gate
 reads the literal from the shipped tree and cross-checks it against the ESM
 banner and the declared dependency.
+
+On the currently-shipped 0.56.0 the gate prints:
+
+```
+check-dependency-overrides: dompurify: shipped 3.4.8 (vendored by monaco-editor@0.56.0, chunk: editor-KLE6jdfb.js)
+check-dependency-overrides: OK (3 override(s) classified, 1 vendored package(s) verified)
+```
 
 ---
 
@@ -219,10 +760,10 @@ block merge.
 
 ### Path to green
 
-1. **Bump the vendoring package.** Monaco 0.56.0 (#524) moves the shipped
-   DOMPurify from 3.2.7 to 3.4.8, clearing 14 of the 18. That PR will itself
-   go red on the 4 residuals -- two of which
-   (`GHSA-55q2-fjhq-7xh7`, `GHSA-cmwh-pvxp-8882`) are moderate -- and then go
+1. **Bump the vendoring package. (Done - issue #524.)** Monaco 0.56.0 moved
+   the shipped DOMPurify from 3.2.7 to 3.4.8, clearing 14 of the 18. That PR
+   itself went red on the 4 residuals -- two of which
+   (`GHSA-55q2-fjhq-7xh7`, `GHSA-cmwh-pvxp-8882`) are moderate -- and then went
    quiet after merge.
 2. **Wait out the residual upstream.** Clearing the last four needs a
    monaco-editor release vendoring `>= 3.4.13`; none exists as of
@@ -243,12 +784,15 @@ Establishes whether the advisories affecting the shipped DOMPurify are
 actually exploitable here, so remediation urgency is a judgement about
 JotJSON rather than about a version number.
 
-**Conclusion: none of the 18 advisories affecting the shipped 3.2.7 appear
-reachable through Monaco's usage in JotJSON.** Every one requires a
-DOMPurify configuration option, a persistent-config API, an allowlist-
-mutating hook, or an application-side re-parse that Monaco does not use.
-The Monaco bump remains worthwhile as defense in depth, but is **not
-urgent**.
+**Conclusion: none of the advisories affecting the shipped DOMPurify appear
+reachable through Monaco's usage in JotJSON.** This was first derived against
+the 18 advisories covering 3.2.7 and still holds for the **4 residuals**
+covering the currently-shipped 3.4.8 (`GHSA-55q2-fjhq-7xh7`,
+`GHSA-c2j3-45gr-mqc4`, `GHSA-cmwh-pvxp-8882`, `GHSA-vxr8-fq34-vvx9` - see
+Table B). Every one requires a DOMPurify configuration option, a
+persistent-config API, an allowlist-mutating hook, or an application-side
+re-parse that Monaco does not use. The Monaco bump was worthwhile as defense
+in depth, but was **not urgent**.
 
 ### How Monaco calls DOMPurify
 
@@ -292,6 +836,12 @@ Note that `modeConfiguration.hovers` is left at its default (enabled):
 
 Content escaping alone cannot dismiss these; each turns on an API or option.
 
+All 18 advisories that affected the previously-shipped 3.2.7 are listed, for
+the historical record. The **first four rows** (patched 3.4.13 / 3.4.12 /
+3.4.11 / 3.4.9) are the ones still affecting the currently-shipped **3.4.8**;
+every row from `GHSA-gvmj-g25r-r7wr` down is patched at `<= 3.4.8` and is
+therefore already cleared by what ships today.
+
 | GHSA | Patched | Precondition | Monaco? | Reachable |
 | --- | --- | --- | --- | --- |
 | `GHSA-55q2-fjhq-7xh7` | 3.4.13 | `IN_PLACE` + element-removing hook | Never uses `IN_PLACE` | No |
@@ -315,7 +865,8 @@ Content escaping alone cannot dismiss these; each turns on an API or option.
 
 ### Caveats
 
-This assessment describes Monaco's usage **as of 0.55.1 / 0.56.0**. It is
+This assessment describes Monaco's usage **as of 0.56.0** (the shipped
+version), and was verified identical in its predecessor 0.55.1. It is
 not a guarantee:
 
 - Upstream can change `domSanitize.js` in any release without notice, so the
@@ -323,9 +874,10 @@ not a guarantee:
 - It covers Monaco's DOMPurify usage, not a proof that no other shipped code
   calls `sanitize()` differently. `domSanitize.js` is the only importer
   today.
-- "Not reachable" is not "not worth fixing". Running a sanitizer with 18
-  known bypasses relies on preconditions staying false, which is a fragile
-  property to depend on.
+- "Not reachable" is not "not worth fixing". Running a sanitizer with known
+  bypasses (4 against the shipped 3.4.8; 18 against the previously-shipped
+  3.2.7) relies on preconditions staying false, which is a fragile property
+  to depend on.
 
 ---
 
@@ -362,6 +914,17 @@ explicitly listed in `VENDORED_PACKAGES`.
 ## Related
 
 - Issue #514 - the DOMPurify override audit that produced this document.
-- `scripts/check-dependency-overrides.mjs` - the enforcing gate.
+- Issue #533 - the Vitest lockstep incident behind "Peer-locked
+  dependency families".
+- Issue #506 - the grouped-security-updates gap behind "Grouped security
+  updates"; #536 is the gate that closed it.
+- Issue #550 - the Angular 22 / TypeScript 6 migration that unblocks the
+  `@angular/*` major `ignore`.
+- Issue #535 - the scheduled alert-to-PR coverage auditor (the runtime
+  half these lint-time gates cannot cover).
+- `scripts/check-dependency-overrides.mjs` - the override gate.
+- `scripts/check-dependabot-config.mjs` - the Dependabot config gate.
+- `scripts/check-lockfile.mjs` - `PEER_LOCKED_FAMILIES`, the lockstep
+  detection half.
 - `DESIGN_SPEC.md` -> Security - the normative rule.
 - `AGENTS.md` Sections 6 and 7 - contributor and agent guidance.

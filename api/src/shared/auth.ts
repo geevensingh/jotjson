@@ -25,11 +25,7 @@ import jwksClient from 'jwks-rsa';
 import { trackEvent } from './telemetry';
 
 export type AuthRejectReason =
-  | 'missing_bearer'
-  | 'malformed'
-  | 'expired'
-  | 'invalid_signature'
-  | 'config_missing';
+  'missing_bearer' | 'malformed' | 'expired' | 'invalid_signature' | 'config_missing';
 
 export interface AuthenticatedPrincipal {
   /** Stable Entra object id - `oid` claim, falling back to `sub`. */
@@ -248,9 +244,7 @@ function getKey(authority: string): GetPublicKeyOrSecret {
 }
 
 type BearerTokenResult =
-  | { kind: 'absent' }
-  | { kind: 'malformed' }
-  | { kind: 'token'; token: string };
+  { kind: 'absent' } | { kind: 'malformed' } | { kind: 'token'; token: string };
 
 function extractBearerToken(req: HttpRequest): BearerTokenResult {
   const custom =

@@ -1265,6 +1265,37 @@ enforcement and the field together in the same PR, or not at all.
   and the preferred end-state are documented in `docs/supply-chain.md`
   (issue #514).
 
+- **Dependency update policy must be machine-checked, not just
+  commented.** `.github/dependabot.yml` encodes security-relevant policy -
+  which packages are grouped, which majors are suppressed - and its
+  correctness is otherwise unobservable until the next scheduled run.
+  `scripts/check-dependabot-config.mjs` (lint chain) enforces it. Every
+  group must declare `applies-to` explicitly: the key defaults to
+  `version-updates`, and that invisible default meant the `angular` group
+  never applied to security updates, so four Angular advisories produced
+  four single-package PRs that could not install against the family's exact
+  peer pins (issue #506). No `security-updates` group may carry
+  `update-types`, which is structurally broken on that path because the
+  SemVer gate compares against the registry's newest release and
+  security-path ignores cannot lower it. Every group is classified in
+  `GROUP_POLICY` with a kind and a security posture, and every `ignore`
+  entry in `IGNORE_POLICY` with a rationale - the same named-mechanism
+  forcing function the overrides gate uses. Because an `ignore` carrying
+  `versions:` suppresses security updates while an `update-types`-scoped
+  one does not, the former must declare `suppressesSecurity: true`. The
+  group registry is additionally cross-checked in both directions against
+  `PEER_LOCKED_FAMILIES` in `scripts/check-lockfile.mjs`, so prevention
+  (the group) and detection (the lockstep assertion) cannot describe
+  different families. The mapping is one group to N families, declared
+  explicitly in each peer-locked group's `families: [...]` list rather
+  than inferred from the group name -- an inferred mapping lets one of
+  two co-grouped families be deleted silently. The cross-check is over
+  family *names*, not members: the two halves range over different sets
+  (see `docs/supply-chain.md` -> "What 'coverage' means on each side").
+  Note the structural ceiling: the gate validates the config file, not
+  GitHub's behavior. See `docs/supply-chain.md` -> "Grouped security
+  updates" (issues #506, #536) and "One group, two families" (#552).
+
 ### Scalability
 - Cosmos DB serverless scales automatically.
 - Azure Functions consumption plan scales to zero when idle.
@@ -3620,6 +3651,35 @@ Out of scope (for v1):
   click reach into the legacy `<input type="file">` fallback to size a
   future download-on-save fallback). DESIGN_SPEC s "Local file editing"
   subsection extended with a "Write-back (1.4.0)" block.
+- **1.4.1**: Angular security patch - all `@angular/*` and
+  `@angular-devkit/*` packages bumped to 21.2.22 in lockstep. Clears ten
+  open Dependabot alerts (nine high, one medium, all runtime scope)
+  covering nine unique CVEs: CVE-2026-50555 / CVE-2026-50556 /
+  CVE-2026-69149 (`platform-server`), CVE-2026-54266 / CVE-2026-54268 /
+  CVE-2026-68945 (`common`), CVE-2026-54267 (`core`), CVE-2026-54265
+  (`compiler`), and CVE-2026-69151 (`core` + `compiler`, hence ten alerts
+  from nine CVEs). Mostly XSS - i18n event-handler attributes, SSR
+  raw-content escaping, two-way-binding sanitization bypass - plus
+  HttpTransferCache cross-request poisoning and a `formatDate` OOM DoS.
+  The last two have no live exposure surface here (no
+  `provideClientHydration` / `TransferState`; Angular's `formatDate` is
+  unused in favor of the repo's own `formatDateAnnotation`), but the fix
+  is taken regardless. All 13 packages had to move together: the
+  framework peer-locks with **exact** pins (`@angular/core@21.2.22` peers
+  `@angular/compiler@"21.2.22"`), which is why the four single-package
+  Dependabot PRs (#468-#471) were unmergeable at install and each
+  targeted below the 21.2.19 fix floor. `typescript` stays `~5.9.3` (it
+  already satisfies every 21.2.22 peer) and `@angular/cdk` /
+  `@angular/material` stay at 21.2.12 - they ride a separate release
+  cadence, peer `@angular/core` on a caret range, and carry no alerts.
+  Forced transitives moved with the train and incidentally cleared
+  several dev-scope alerts: postcss 8.5.23, undici 7.29.0, piscina 5.2.0,
+  esbuild-wasm 0.28.1, webpack-dev-server 5.2.6,
+  http-proxy-middleware 3.0.7, shell-quote 1.10.0. Bumped **patch**
+  rather than "no bump" because `@angular/core` / `common` / `compiler`
+  are shipped runtime code, so the sanitization fixes are a user-visible
+  bug fix under the Versioning section; the `deps` no-bump carve-out is read as
+  covering dev/tooling dependencies. No source changes.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

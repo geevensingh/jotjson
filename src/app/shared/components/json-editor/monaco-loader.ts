@@ -33,6 +33,26 @@
  *
  * `monacoPromise` remains, but only as a resettable memo of an
  * in-flight or settled load - never as evidence about the realm.
+ *
+ * ## Workers are Monaco's, not ours (issue #524)
+ *
+ * This module deliberately does **not** configure `MonacoEnvironment`.
+ * Evaluating `vs/editor/editor.main` runs
+ * `self.MonacoEnvironment = { getWorker }`, an unconditional
+ * *assignment*, so anything written to that global beforehand is
+ * discarded rather than merged. Monaco then resolves its own workers
+ * from `/vs/assets/*.worker-*.js` via `require.toUrl`, wrapped in a
+ * blob that `importScripts` them - which is why the CSP needs
+ * `worker-src 'self' blob:`.
+ *
+ * A `getWorkerUrl` hook used to be installed here pointing at
+ * `/vs/base/worker/workerMain.js`. That path exists in neither
+ * monaco-editor 0.55.1 nor 0.56.0, and the hook never ran in either,
+ * because the assignment above had already replaced the object. It was
+ * removed as dead code when 0.56.0 landed. If a future Monaco version
+ * stops assigning `MonacoEnvironment`, worker resolution becomes our
+ * problem again - and the symptom will be a failed worker fetch, not a
+ * silent fallback.
  */
 import type * as MonacoNS from 'monaco-editor';
 
@@ -63,14 +83,19 @@ declare global {
   interface Window {
     require?: MonacoAmdRequire;
     monaco?: typeof MonacoNS;
+    /**
+     * Monaco's own `vs/editor/editor.main` **assigns** this global -
+     * `self.MonacoEnvironment = { getWorker }` - as part of evaluating,
+     * so the loader neither creates nor populates it. We declare it
+     * only because the browser-integration spec overwrites `getWorker`
+     * afterwards to avoid fetching `vs/assets/editor.worker-*.js`, and
+     * that assignment has to be type-safe without widening to `any`.
+     *
+     * `getWorkerUrl` is deliberately absent: Monaco replaces this whole
+     * object, so anything we put on it before requiring `editor.main`
+     * is discarded. See {@link loadMonaco}.
+     */
     MonacoEnvironment?: {
-      getWorkerUrl?: (workerId: string, label: string) => string;
-      // `getWorker` is part of Monaco's documented Environment interface
-      // and takes precedence over `getWorkerUrl` when set. We do not use
-      // it from the production loader (see `getWorkerUrl` above), but the
-      // integration spec stubs it to avoid fetching
-      // `vs/assets/editor.worker-*.js`. Declared here so the test-side
-      // assignment is type-safe without widening to `any`.
       getWorker?: (workerId: string, label: string) => Worker | Promise<Worker>;
     };
     /**
@@ -169,20 +194,6 @@ function alreadyEvaluatedMessage(reason: UnusableRequireReason): string {
   );
 }
 
-function makeWorkerUrl(): string {
-  // The AMD loader spins up web-workers by eval-loading vs/base/worker/workerMain.
-  // Point it at our copied /vs/ folder.
-  return URL.createObjectURL(
-    new Blob(
-      [
-        `self.MonacoEnvironment = { baseUrl: '${location.origin}/vs/' };` +
-          `importScripts('${location.origin}/vs/base/worker/workerMain.js');`,
-      ],
-      { type: 'text/javascript' },
-    ),
-  );
-}
-
 export function loadMonaco(): Promise<typeof MonacoNS> {
   if (monacoPromiseOverride) return monacoPromiseOverride;
   if (typeof window === 'undefined') {
@@ -192,15 +203,6 @@ export function loadMonaco(): Promise<typeof MonacoNS> {
   if (monacoPromise) return monacoPromise;
 
   monacoPromise = new Promise<typeof MonacoNS>((resolve, reject) => {
-    // The loader owns `getWorkerUrl` and nothing else on this global,
-    // so mutate the existing object rather than replacing it: a caller
-    // that installed `getWorker` (the browser-integration spec's no-op
-    // worker) must keep both its key and its object identity, since it
-    // may still hold a reference for cleanup.
-    const environment = window.MonacoEnvironment ?? {};
-    environment.getWorkerUrl = makeWorkerUrl;
-    window.MonacoEnvironment = environment;
-
     const realmState = window.JJ_MONACO_LOADER_STATE;
     const existingScript =
       realmState?.script ??

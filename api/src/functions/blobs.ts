@@ -146,8 +146,7 @@ async function readRecentlyViewedEnabled(
   try {
     const user = await readUser(userId);
     const prefs = user?.preferences as
-      | (Record<string, unknown> & { recentlyViewedEnabled?: unknown })
-      | undefined;
+      (Record<string, unknown> & { recentlyViewedEnabled?: unknown }) | undefined;
     if (typeof prefs?.recentlyViewedEnabled === 'boolean') {
       return prefs.recentlyViewedEnabled;
     }

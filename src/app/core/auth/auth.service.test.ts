@@ -1,6 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { MsalBroadcastService } from '@azure/msal-angular';
-import { EventMessage, EventType, InteractionRequiredAuthError } from '@azure/msal-browser';
+import {
+  EventMessage,
+  EventType,
+  InteractionRequiredAuthError,
+  InteractionRequiredAuthErrorCodes,
+} from '@azure/msal-browser';
 import { type Mocked } from 'vitest';
 import { environment } from '../../../environments/environment';
 import {
@@ -151,10 +156,13 @@ describe('AuthService', () => {
       expect(fake.acquireTokenSilentCalls).toBe(0);
     });
 
-    it('acquireTokenSilent returns null on InteractionRequiredAuthError', async () => {
+    it('acquireTokenSilent degrades to null when interaction is required', async () => {
       const auth = configuredAuth();
       fake.accounts = [makeAccount()];
-      fake.silentShouldThrow = new InteractionRequiredAuthError();
+      fake.silentShouldThrow = new InteractionRequiredAuthError(
+        InteractionRequiredAuthErrorCodes.interactionRequired,
+        'test-correlation-id',
+      );
       const token = await auth.acquireTokenSilent();
       expect(token).toBeNull();
     });
