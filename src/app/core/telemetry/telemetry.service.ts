@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import type { ApplicationInsights, ITelemetryItem } from '@microsoft/applicationinsights-web';
 import { environment } from '../../../environments/environment';
+import { buildAppInsightsConfig } from './app-insights-config';
 import { NormalizedError, sanitizePath } from './normalize-error';
 import { TelemetryMessageId } from './telemetry-message-ids';
 
@@ -167,21 +168,7 @@ export class TelemetryService {
     // Dynamic import keeps the SDK in a lazy chunk. Do not statically
     // import `@microsoft/applicationinsights-web` from this file.
     const { ApplicationInsights: AI } = await import('@microsoft/applicationinsights-web');
-    const ai = new AI({
-      config: {
-        connectionString,
-        // Manual instrumentation policy (see DESIGN_SPEC Telemetry).
-        disableExceptionTracking: true,
-        disableAjaxTracking: false,
-        enableAutoRouteTracking: false,
-        enableAjaxErrorStatusText: false,
-        enableAjaxPerfTracking: false,
-        disableCookiesUsage: true,
-        // Keep correlation between SPA and same-origin Functions.
-        enableCorsCorrelation: true,
-        distributedTracingMode: 2 /* W3C */,
-      },
-    });
+    const ai = new AI({ config: buildAppInsightsConfig(connectionString) });
     ai.loadAppInsights();
     ai.addTelemetryInitializer(this.privacyInitializer);
     this.appInsights = ai;

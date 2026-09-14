@@ -53,7 +53,9 @@ Source pointers:
 ## Privacy contract (important)
 
 `TelemetryService` installs a privacy initializer
-(`telemetry.service.ts:167-207`) on every envelope before it ships:
+(`TelemetryService.privacyInitializer` in
+`src/app/core/telemetry/telemetry.service.ts`) on every envelope before it
+ships:
 
 - URLs are reduced to path templates -- query strings and fragments are
   stripped via `sanitizePath`.
@@ -69,6 +71,27 @@ Source pointers:
   `LoggerService.error` so we control what is reported.
 - `enableAutoRouteTracking: false` -- pageViews are emitted manually by
   `RouteTracker`, after sanitization.
+- `featureOptIn: { SdkStats: { mode: disable, blockCdnCfg: true } }` -- the
+  SDK's own self-stats stream (added in SDK 3.4.3) is **off**. Left at its
+  default it reports `Item_Success_Count` / `Item_Dropped_Count` /
+  `Item_Retry_Count` as `MetricData` through `core.track()` -- onto our
+  connection string, into `customMetrics`, outside `LoggerService` and the
+  frozen messageId catalog. `blockCdnCfg` is required as well as `mode`,
+  because the SDK's CfgSyncPlugin polls a Microsoft-hosted config blob that
+  can otherwise override `featureOptIn` at runtime with no deploy.
+
+The SDK configuration is a single pure function,
+`buildAppInsightsConfig` in
+`src/app/core/telemetry/app-insights-config.ts`, which is the source of
+truth for all of the above; `app-insights-config.test.ts` asserts it.
+
+> **On any `@microsoft/applicationinsights-web` minor or major bump**,
+> re-verify the SDK's default `featureOptIn` map (in its
+> `dist-es5/AISku.js`) against `FEATURE_POLICY` in
+> `scripts/check-sdk-feature-optin.mjs`. That gate runs in `npm run lint`
+> and fails on a new feature key, a renamed one, a changed default mode, or
+> a dropped opt-out -- so this is normally automatic, but the decision it
+> forces is a human one. See PR #566 for the incident that motivated it.
 
 If a query you expect to see is missing rows, the privacy initializer
 dropping a `?`-containing envelope is one likely cause.
@@ -85,6 +108,20 @@ Classic AI schema (App Insights resource):
 | `pageViews` | `RouteTracker` on each navigation |
 | `dependencies` | Auto-instrumented browser fetch/XHR (`disableAjaxTracking: false`); also outgoing calls from Functions |
 | `requests` | Auto-instrumented Function invocations |
+
+Two SDK-originated streams are worth naming explicitly, because neither
+goes through `LoggerService` and neither appears in
+`telemetry-message-ids.ts`:
+
+| Stream | Status |
+|---|---|
+| `traces` / `InternalMessageId: <n>` | **On**, and pre-dates this inventory. The SDK defaults `loggingLevelTelemetry` to CRITICAL and `loadAppInsights()` polls its internal log queue, so CRITICAL SDK diagnostics ship as `MessageData`. Conditional on an SDK error, so it is low-volume and genuinely diagnostic. |
+| `customMetrics` / `...SdkStats` | **Off**, deliberately -- see the Privacy contract above. This is why `customMetrics` has no row in the table above. |
+
+So the precise invariant is: *every SDK stream that emits on a timer or on
+user activity is off; the only SDK-originated envelopes we accept are
+conditional internal diagnostics on the error path.* It is not that the
+SDK emits nothing of its own.
 
 LAW schema (Log Analytics workspace) -- same data, different table names:
 
@@ -1004,7 +1041,8 @@ customEvents
 By default, no telemetry leaves your machine. `environment.example.ts` and
 `environment.prod.ts` ship with `appInsightsConnectionString: ''`, and
 `TelemetryService.connect()` short-circuits to `disabled` when the string
-is empty (`telemetry.service.ts:66-71`).
+is empty (`TelemetryService.connect` in
+`src/app/core/telemetry/telemetry.service.ts`).
 
 - **Frontend** -- open browser **DevTools -> Console**. `LoggerService`
   mirrors every entry there as `[<messageId>] {props}`. This is the fast
@@ -1386,8 +1424,10 @@ exceptions
 - **Ingestion latency.** Expect 30 s to 2 min before fresh events show up
   in `Logs`. Live Metrics is faster (~1 s) but ephemeral.
 - **The privacy initializer drops envelopes containing `?`** in URI/name
-  fields (`telemetry.service.ts:192-198`). If `dependencies` is missing
-  rows for some endpoint, check that `sanitizePath` covers the URL shape.
+  fields (`TelemetryService.privacyInitializer` in
+  `src/app/core/telemetry/telemetry.service.ts`). If `dependencies` is
+  missing rows for some endpoint, check that `sanitizePath` covers the URL
+  shape.
 - **30-day retention** on the LAW (`appInsights.bicep:11`). Older data is
   gone unless retention is bumped or data is archived.
 - **Cookies disabled.** Cross-session correlation only works for signed-in

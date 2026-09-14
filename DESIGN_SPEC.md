@@ -2104,6 +2104,14 @@ Manual instrumentation, driven through `core/telemetry/LoggerService`:
   string and fragment stripped). Ajax error response bodies are **off**
   (`enableAjaxErrorStatusText: false`).
 - **Browser perf timings** - on (no PII).
+- **SDK self-stats** - **off**. The SDK's `SdkStats` feature (3.4.3+)
+  defaults to on and reports its own success/drop/retry counts into
+  `customMetrics`; we opt out in `buildAppInsightsConfig`
+  (`core/telemetry/app-insights-config.ts`), with `blockCdnCfg` so a
+  CDN-published config cannot re-enable it at runtime. The precise
+  invariant is that every SDK stream emitting on a timer or on user
+  activity is off - the SDK's conditional CRITICAL internal diagnostics
+  still reach `traces`. See `docs/telemetry.md` for the full inventory.
 
 ### What we collect (Functions)
 
