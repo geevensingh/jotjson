@@ -2103,7 +2103,16 @@ Manual instrumentation, driven through `core/telemetry/LoggerService`:
   correlation. URLs are sanitized in a telemetry initializer (query
   string and fragment stripped). Ajax error response bodies are **off**
   (`enableAjaxErrorStatusText: false`).
-- **Browser perf timings** - on (no PII).
+- **Browser perf timings** - on (no PII). The SDK emits one
+  `PageViewPerformanceData` sidecar per page load (not per route
+  change), landing in `browserTimings`.
+- **SDK self-stats** - **off**. The SDK's `SdkStats` feature (3.4.3+)
+  defaults to on and reports its own success/drop/retry counts into
+  `customMetrics`; we opt out in `buildAppInsightsConfig`
+  (`core/telemetry/app-insights-config.ts`), with `blockCdnCfg` so a
+  CDN-published config cannot re-enable that feature at runtime. See
+  `docs/telemetry.md` for the full inventory, including the SDK-originated
+  streams we do accept.
 
 ### What we collect (Functions)
 
