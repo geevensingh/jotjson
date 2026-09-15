@@ -197,6 +197,32 @@ jobs:
         id: lint-dependency-overrides
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:dependency-overrides
+      - name: Lint - AI SDK feature opt-in
+        # PR #566. Detection half of the SdkStats opt-out. Bumping
+        # `@microsoft/applicationinsights-web` 3.4.1 -> 3.4.4 crossed 3.4.3,
+        # which added `SdkStats` to the SDK's default `featureOptIn` map at
+        # mode `enable`. Left alone it reports SDK self-stats through
+        # `core.track()` onto our own connection string and into
+        # `customMetrics` -- a table absent from the telemetry inventory and
+        # outside the frozen messageId catalog. The manifest diff was two
+        # lines; the behavior change lived in the dependency's defaults.
+        #
+        # `app-insights-config.test.ts` asserts our opt-out by value, but
+        # that compares our literal against our literal and cannot fail when
+        # a future release adds the NEXT opt-out-by-default feature. This
+        # gate reads the SDK's own default map out of the installed
+        # dist-es5/AISku.js -- with the TypeScript parser, not a regex, so an
+        # entry it cannot read fails the run instead of vanishing from the
+        # result -- and requires an explicit, justified decision in
+        # FEATURE_POLICY (scripts/sdk-feature-policy.mjs) for every key,
+        # failing on a new feature, a renamed one, or a flipped default.
+        # Whether our config still declares the opt-out is asserted in the
+        # Vitest suite, which can execute the TypeScript. Requires
+        # node_modules, so it must run after `npm ci` (it does; the install
+        # is at the top of this job).
+        id: lint-sdk-feature-optin
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:sdk-feature-optin
       - name: Lint - Dependabot config
         # Issue #506 / #536. Structural gate over `.github/dependabot.yml`.
         # The motivating defect was an invisible default contradicting a
@@ -285,6 +311,7 @@ jobs:
           OUTCOME_SW_SHAPE: ${{ steps.lint-sw-shape.outcome }}
           OUTCOME_LAUNCH_ARGS: ${{ steps.lint-launch-args.outcome }}
           OUTCOME_DEPENDENCY_OVERRIDES: ${{ steps.lint-dependency-overrides.outcome }}
+          OUTCOME_SDK_FEATURE_OPTIN: ${{ steps.lint-sdk-feature-optin.outcome }}
           OUTCOME_DEPENDABOT_CONFIG: ${{ steps.lint-dependabot-config.outcome }}
           OUTCOME_UNUSED: ${{ steps.lint-unused.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
@@ -329,6 +356,7 @@ jobs:
             emit "SW shape"                "$OUTCOME_SW_SHAPE"     "npm run lint:sw-shape - if src/sw.worker.ts changed intentionally, update EXPECTED_SW_SOURCE_SHA256 in scripts/check-sw-shape.mjs"
             emit "Vitest launch args"      "$OUTCOME_LAUNCH_ARGS"  "npm run lint:launch-args - vitest.shared.mts must keep COMMON_LAUNCH_ARGS intact and return provider: playwright({ launchOptions: { args: [...COMMON_LAUNCH_ARGS, ...extraArgs] } }); never pass flags via instances[].launch (PR #418)"
             emit "Dependency overrides"   "$OUTCOME_DEPENDENCY_OVERRIDES" "npm run lint:dependency-overrides - classify the new override in OVERRIDE_POLICY (scripts/check-dependency-overrides.mjs), or, if it targets a package vendored inside a prebuilt asset, remove the override and bump the vendoring package instead; see docs/supply-chain.md"
+            emit "AI SDK feature opt-in" "$OUTCOME_SDK_FEATURE_OPTIN" "npm run lint:sdk-feature-optin - the installed Application Insights SDK changed its default featureOptIn map; classify the new/renamed feature in FEATURE_POLICY (scripts/sdk-feature-policy.mjs) and, if it emits telemetry, opt out in src/app/core/telemetry/app-insights-config.ts; see docs/telemetry.md"
             emit "Dependabot config"      "$OUTCOME_DEPENDABOT_CONFIG" "npm run lint:dependabot-config - every group needs an explicit applies-to and a GROUP_POLICY entry; every ignore needs an IGNORE_POLICY entry; security groups must not carry update-types (scripts/check-dependabot-config.mjs); see docs/supply-chain.md -> Grouped security updates"
             emit "Unused code"             "$OUTCOME_UNUSED"       "npm run lint:unused - either remove the unused export/dep/file, add a workspace 'entry' pattern (for files reachable only via a runtime convention knip can't see, e.g. Playwright's testDir), or add the dep to knip.jsonc ignoreDependencies (or ignoreBinaries, for CLI tools invoked from scripts); every allowlist addition needs a rationale comment naming the specific (not generic) mechanism by which the dep/entry is used"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
