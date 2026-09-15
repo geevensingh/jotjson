@@ -53,7 +53,9 @@ Source pointers:
 ## Privacy contract (important)
 
 `TelemetryService` installs a privacy initializer
-(`telemetry.service.ts:167-207`) on every envelope before it ships:
+(`TelemetryService.privacyInitializer` in
+`src/app/core/telemetry/telemetry.service.ts`) on every envelope before it
+ships:
 
 - URLs are reduced to path templates -- query strings and fragments are
   stripped via `sanitizePath`.
@@ -69,6 +71,27 @@ Source pointers:
   `LoggerService.error` so we control what is reported.
 - `enableAutoRouteTracking: false` -- pageViews are emitted manually by
   `RouteTracker`, after sanitization.
+- `featureOptIn: { SdkStats: { mode: disable, blockCdnCfg: true } }` -- the
+  SDK's own self-stats stream (added in SDK 3.4.3) is **off**. Left at its
+  default it reports `Item_Success_Count` / `Item_Dropped_Count` /
+  `Item_Retry_Count` as `MetricData` through `core.track()` -- onto our
+  connection string, into `customMetrics`, outside `LoggerService` and the
+  frozen messageId catalog. `blockCdnCfg` is required as well as `mode`,
+  because the SDK's CfgSyncPlugin polls a Microsoft-hosted config blob that
+  can otherwise override `featureOptIn` at runtime with no deploy.
+
+The SDK configuration is a single pure function,
+`buildAppInsightsConfig` in
+`src/app/core/telemetry/app-insights-config.ts`, which is the source of
+truth for all of the above; `app-insights-config.test.ts` asserts it.
+
+> **On any `@microsoft/applicationinsights-web` minor or major bump**,
+> re-verify the SDK's default `featureOptIn` map (in its
+> `dist-es5/AISku.js`) against `FEATURE_POLICY` in
+> `scripts/sdk-feature-policy.mjs`. `scripts/check-sdk-feature-optin.mjs`
+> runs in `npm run lint` and fails on a new feature key, a renamed one, or
+> a changed default mode -- so this is normally automatic, but the decision
+> it forces is a human one. See PR #566 for the incident that motivated it.
 
 If a query you expect to see is missing rows, the privacy initializer
 dropping a `?`-containing envelope is one likely cause.
@@ -85,6 +108,34 @@ Classic AI schema (App Insights resource):
 | `pageViews` | `RouteTracker` on each navigation |
 | `dependencies` | Auto-instrumented browser fetch/XHR (`disableAjaxTracking: false`); also outgoing calls from Functions |
 | `requests` | Auto-instrumented Function invocations |
+| `browserTimings` | SDK `PageViewPerformanceData` sidecar. Emitted **once per page load**, alongside the first `trackPageView` whose navigation timings become ready -- not once per route change. |
+
+`customMetrics` is deliberately absent: see `SdkStats` below.
+
+### SDK-originated streams
+
+These do not go through `LoggerService` and are not in
+`telemetry-message-ids.ts`, so they are worth naming individually. This
+list is maintained by hand and is only as fresh as its last review -- it
+is not a completeness guarantee. `scripts/check-sdk-feature-optin.mjs`
+mechanically covers the `featureOptIn` surface; the rest of this table
+does not have an equivalent gate yet (see issue #570).
+
+| Stream | Status |
+|---|---|
+| `dependencies` (`RemoteDependencyData`) | **On, by choice.** `disableAjaxTracking: false` for SPA <-> Functions correlation. Emitted on user activity; URLs sanitized by the privacy initializer, and ajax error response bodies are off. |
+| `browserTimings` (`PageViewPerformanceData`) | **On.** Sidecar to the first ready `trackPageView`, once per page load. |
+| `traces` / `InternalMessageId: <n>` | **On**, and pre-dates this inventory. The SDK defaults `loggingLevelTelemetry` to CRITICAL and `loadAppInsights()` polls its internal log queue, so CRITICAL SDK diagnostics ship as `MessageData`. Conditional on an SDK error, so low-volume and genuinely diagnostic. |
+| `customMetrics` / `...SdkStats` | **Off**, deliberately -- see the Privacy contract above. |
+
+Not a telemetry stream, but an SDK-originated network call worth knowing
+about: the SDK's `CfgSyncPlugin` is constructed unconditionally and GETs
+`https://js.monitor.azure.com/scripts/b/ai.config.1.cfg.json` on init and
+then every 30 minutes. It is receive-only remote configuration, permitted
+by `connect-src` in `staticwebapp.config.json`. Our per-feature
+`blockCdnCfg` pins the `SdkStats` opt-out against it but does **not** stop
+the poll; the plugin-level switch
+(`extensionConfig.AppInsightsCfgSyncPlugin.blkCdnCfg`) is not set.
 
 LAW schema (Log Analytics workspace) -- same data, different table names:
 
@@ -96,6 +147,7 @@ LAW schema (Log Analytics workspace) -- same data, different table names:
 | `pageViews` | `AppPageViews` |
 | `dependencies` | `AppDependencies` |
 | `requests` | `AppRequests` |
+| `browserTimings` | `AppBrowserTimings` |
 
 The KQL examples below use the classic AI schema. To run them against the
 LAW directly, swap the table name and rename `timestamp` to `TimeGenerated`.
@@ -1004,7 +1056,8 @@ customEvents
 By default, no telemetry leaves your machine. `environment.example.ts` and
 `environment.prod.ts` ship with `appInsightsConnectionString: ''`, and
 `TelemetryService.connect()` short-circuits to `disabled` when the string
-is empty (`telemetry.service.ts:66-71`).
+is empty (`TelemetryService.connect` in
+`src/app/core/telemetry/telemetry.service.ts`).
 
 - **Frontend** -- open browser **DevTools -> Console**. `LoggerService`
   mirrors every entry there as `[<messageId>] {props}`. This is the fast
@@ -1386,8 +1439,10 @@ exceptions
 - **Ingestion latency.** Expect 30 s to 2 min before fresh events show up
   in `Logs`. Live Metrics is faster (~1 s) but ephemeral.
 - **The privacy initializer drops envelopes containing `?`** in URI/name
-  fields (`telemetry.service.ts:192-198`). If `dependencies` is missing
-  rows for some endpoint, check that `sanitizePath` covers the URL shape.
+  fields (`TelemetryService.privacyInitializer` in
+  `src/app/core/telemetry/telemetry.service.ts`). If `dependencies` is
+  missing rows for some endpoint, check that `sanitizePath` covers the URL
+  shape.
 - **30-day retention** on the LAW (`appInsights.bicep:11`). Older data is
   gone unless retention is bumped or data is archived.
 - **Cookies disabled.** Cross-session correlation only works for signed-in
