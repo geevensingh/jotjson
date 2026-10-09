@@ -7,3 +7,42 @@ pull_request_rules:
       - -draft
     actions:
       update:
+  - name: Dependabot CI green -> trigger factory approval pass
+    conditions:
+      - author=dependabot[bot]
+      - base=main
+      - -closed
+      - -draft
+      - -label=deps-needs-human
+      - check-success=Web build & type-check
+      - check-success=API build & test
+      - check-success=Workflows lint (actionlint)
+      - check-success=Web unit tests
+      - check-success=Smoke e2e (anonymous, Chromium)
+      - check-success=Smoke api integration (real Cosmos)
+      - check-success=Analyze (actions)
+      - check-success=Analyze (javascript-typescript)
+    actions:
+      label:
+        toggle:
+          - deps-ci-green
+  - name: Dependabot CI red -> trigger factory fix pass
+    conditions:
+      - author=dependabot[bot]
+      - base=main
+      - -closed
+      - -draft
+      - -label=deps-needs-human
+      - or:
+          - check-failure=Web build & type-check
+          - check-failure=API build & test
+          - check-failure=Workflows lint (actionlint)
+          - check-failure=Web unit tests
+          - check-failure=Smoke e2e (anonymous, Chromium)
+          - check-failure=Smoke api integration (real Cosmos)
+          - check-failure=Analyze (actions)
+          - check-failure=Analyze (javascript-typescript)
+    actions:
+      label:
+        toggle:
+          - deps-ci-red
