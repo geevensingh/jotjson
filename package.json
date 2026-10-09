@@ -77,7 +77,7 @@
     "pretest:watch": "node scripts/write-build-info.mjs"
   },
   "dependencies": {
-    "@angular/animations": "^21.2.22",
+    "@angular/animations": "^21.2.23",
     "@angular/cdk": "^21.2.14",
     "@angular/common": "^21.2.23",
     "@angular/compiler": "^21.2.23",
