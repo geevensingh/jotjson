@@ -296,9 +296,10 @@ under a perf-only Vitest configuration:
 - `tsconfig.perf-l2.json` includes `*.perf.ts` and excludes `*.test.ts`.
 - `vitest.perf.config.mts` launches Playwright Chromium with
   `--js-flags=--expose-gc` so the spec can call `globalThis.gc()`
-  between iterations, and uses a 15-minute `testTimeout` sized for
-  the default 10K + 100K tiers (the opt-in 1M tier may exceed it;
-  tracked in #437).
+  between iterations. The per-test timeout is env-gated (see
+  "L2 1M-node opt-in" below): 15 min by default, 4 hr when
+  `JOTJSON_PERF_L2_FORCE_1M=1`, or any positive integer (ms) via
+  `JOTJSON_PERF_L2_TIMEOUT_MS` escape hatch.
 
 ### L2 scenarios
 
@@ -310,17 +311,30 @@ under a perf-only Vitest configuration:
   the `.tree-body` container (each followed by a double-rAF). The
   emitted `wallNs` covers the entire post-expand scroll session, not
   the scroll alone; diff comparisons are still valid because every
-  iteration runs the same fixed sequence. **10K only** in L2 --
-  mat-tree is not virtualized in v1, so 100K/1M scroll would OOM
-  the browser. L3's `scroll-after-expand.spec.ts` runs the larger
-  sizes in a real browser.
+  iteration runs the same fixed sequence. Runs at every enabled
+  fixture size (10K by default; 100K/1M opt-in). The mat-tree
+  virtualization landed in issue #95 made the larger sizes viable
+  under L2.
 
-Default fixture matrix: deep25 + wide-aoo at 10K. Set
-`window.__perfL2Force100K = true` (or `?force100k=1`) to also bench
-at 100K, and `window.__perfL2Force1M = true` (or `?force1m=1`) to add
-1M. Each 100K iter is ~50s; the 1M iter is multiple minutes. Vitest's
-`testTimeout` is set to 15 minutes in `vitest.perf.config.mts` --
-sized for the default tiers; a 1M opt-in run may exceed it (#437).
+Default fixture matrix: deep25 + wide-aoo at 10K + 100K. Set
+`JOTJSON_PERF_L2_FORCE_1M=1` (env var on the `npm run perf:l2`
+invocation) to also bench at 1M; that env var is consumed by
+`vitest.perf.config.mts`, which adds `src/testing/perf-l2-force-1m.ts`
+to `setupFiles` so `window.__perfL2Force1M = true` is set in the
+browser context before the spec loads. For interactive DevTools use,
+set `window.__perfL2Force1M = true` directly. Each 100K iter is
+~50s; the 1M iter is multiple minutes. The per-test `testTimeout`
+in `vitest.perf.config.mts` is env-gated: 15 min default (sized for
+10K + 100K), 4 hr when `JOTJSON_PERF_L2_FORCE_1M=1`, or any positive
+integer (ms) via `JOTJSON_PERF_L2_TIMEOUT_MS` (escape hatch; takes
+priority; emits a one-time console.warn so a downstream timeout can
+be attributed). The 4 hr default is a conservative upper bound until
+#437's Phase 2 measurement provides per-iter wall-clock numbers
+worthy of a tighter cap. Re-measure (and consider re-sizing) on:
+hardware changes; node-count tier changes; iteration-count changes
+in `WARMUP_ITERS` / `TIMED_ITERS`; algorithmic changes inside
+`initial-render` or `scroll-after-expand` that change the per-iter
+work envelope.
 
 `scroll-after-expand: wide-aoo @ 10k` is additionally gated behind
 `window.__perfL2ForceWideAooScroll = true` (or `?forcewideaooscroll=1`).
@@ -510,13 +524,18 @@ npm run perf:clean -- --dry-run
   single source of truth (architect r2 tech-debt #2 adoption).
 - **No CI gate**: perf benches do not run in CI yet. Filed as
   follow-up issue (priority:low, requires self-hosted runner).
-- **L2 caps default at 10K nodes**: 100K deep25 mat-tree (NOT
-  virtualized) takes ~50s per iteration synchronously, and the
-  browser thread is blocked during the timed loop. The L2 spec
-  gates 100K behind `?force100k=1` (Vitest's `testTimeout` is set
-  to 15 minutes in `vitest.perf.config.mts` so the opt-in still
-  works).
-  1M is gated similarly behind `?force1m=1`.
+- **L2 caps default at 10K + 100K nodes**: post-#95 virtualization
+  made 100K viable under the per-test 15 min `testTimeout`. The 1M
+  tier is gated behind `JOTJSON_PERF_L2_FORCE_1M=1` (env var) which
+  routes through `vitest.perf.config.mts` to add the
+  `src/testing/perf-l2-force-1m.ts` setupFile (sets
+  `window.__perfL2Force1M = true` in the browser context) AND bumps
+  the per-test `testTimeout` to 4 hours. For DevTools-style use,
+  set `window.__perfL2Force1M = true` directly (the timeout is
+  config-time only; interactive runs are not subject to vitest's
+  per-test deadline anyway). Override with
+  `JOTJSON_PERF_L2_TIMEOUT_MS=<ms>` (must match `^\d+$`; values that
+  don't parse cleanly are ignored with a one-time warn).
 - **L2 `scroll-after-expand: wide-aoo` gated by default**: on a
   910-node depth-1 fan-out, `JsonTreeComponent.expandAll` triggers
   one synchronous CD cycle that materializes every sibling at once,
@@ -556,9 +575,12 @@ npm run perf:clean -- --dry-run
   ~5 MB / ~380K nodes. At default settings the `initial-render`
   and `scroll-after-expand` scenarios at this size risk the
   15-min Vitest `testTimeout`. The L2 spec gates this fixture
-  behind `?force5mb=1` or `window.__perfL2Force5MB = true`
-  (mirrors the existing `?force1m=1` pattern). L1 and L3
-  enforce on this fixture default-on; only L2 needs the opt-in.
+  behind `?force5mb=1` or `window.__perfL2Force5MB = true`. L1
+  and L3 enforce on this fixture default-on; only L2 needs the
+  opt-in. The 1M-node fixture uses a different opt-in path
+  (`JOTJSON_PERF_L2_FORCE_1M=1` env var; see the "Layer 2" section
+  above); a parallel env-var setupFile for 5MB can follow in a
+  separate issue if needed.
 
 See `plan.md` -> "Out of scope" in the session for the full
 follow-up issue list.
